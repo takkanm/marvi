@@ -1,0 +1,25 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "optparse"
+require_relative "../lib/marvi"
+
+OptionParser.new do |opts|
+  opts.banner = "Usage: marvi [FILE]\n       cat FILE | marvi"
+  opts.on("-h", "--help", "Show help") do
+    puts opts
+    exit
+  end
+  opts.on("-v", "--version", "Show version") do
+    puts Marvi::VERSION
+    exit
+  end
+end.parse!
+
+markdown = if ARGV.empty?
+  $stdin.read
+else
+  File.read(ARGV[0])
+end
+
+print Marvi::Renderer.new.render(markdown)
