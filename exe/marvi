@@ -22,4 +22,8 @@ else
   File.read(ARGV[0])
 end
 
-print Marvi::Renderer.new.render(markdown)
+if $stdout.tty?
+  Marvi::Renderer::Curses.new.render(markdown)
+else
+  print Marvi::Renderer::ANSI.new.render(markdown)
+end

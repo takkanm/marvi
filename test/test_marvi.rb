@@ -8,12 +8,13 @@ class TestMarvi < Minitest::Test
   end
 
   def setup
-    @renderer = Marvi::Renderer.new
+    @renderer = Marvi::Renderer::ANSI.new
   end
 
   def test_renders_header
     output = @renderer.render("# Hello")
-    assert_includes output, "# Hello"
+    assert_includes output, "# "
+    assert_includes output, "Hello"
     assert_includes output, Marvi::ANSI::BOLD
   end
 

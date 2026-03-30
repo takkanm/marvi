@@ -34,6 +34,7 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency "kramdown", "~> 2.0"
   spec.add_dependency "kramdown-parser-gfm", "~> 1.0"
+  spec.add_dependency "curses", "~> 1.0"
 
   # For more information and examples about making a new gem, check out our
   # guide at: https://bundler.io/guides/creating_gem.html
