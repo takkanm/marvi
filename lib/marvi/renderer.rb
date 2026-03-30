@@ -57,6 +57,8 @@ module Marvi
         "\n"
       when :hr
         "#{ANSI::CYAN}#{"─" * 60}#{ANSI::RESET}\n\n"
+      when :table
+        render_table(el)
       when :blank
         ""
       else
@@ -66,6 +68,49 @@ module Marvi
 
     def render_children(el, **opts)
       el.children.map { |child| render_element(child, **opts) }.join
+    end
+
+    def render_table(el)
+      rows = el.children.flat_map { |section| section.children }
+      header_row = el.children.find { |s| s.type == :thead }&.children&.first
+
+      # Collect plain text per cell to calculate column widths
+      cell_texts = rows.map do |row|
+        row.children.map { |cell| render_children(cell) }
+      end
+
+      col_widths = cell_texts.transpose.map do |col|
+        col.map { |t| strip_ansi(t).length }.max
+      end
+
+      lines = []
+      rows.each do |row|
+        is_header = row == header_row
+        cells = row.children.each_with_index.map do |cell, i|
+          text = render_children(cell)
+          plain = strip_ansi(text)
+          padding = col_widths[i] - plain.length
+          styled = is_header ? "#{ANSI::BOLD}#{ANSI::CYAN}#{text}#{ANSI::RESET}" : text
+          " #{styled}#{" " * padding} "
+        end
+        lines << "│#{cells.join("│")}│"
+
+        if is_header
+          sep = col_widths.map { |w| "─" * (w + 2) }.join("┼")
+          lines << "├#{sep}┤"
+        end
+      end
+
+      top    = col_widths.map { |w| "─" * (w + 2) }.join("┬")
+      bottom = col_widths.map { |w| "─" * (w + 2) }.join("┴")
+
+      "#{ANSI::CYAN}┌#{top}┐#{ANSI::RESET}\n" \
+        + lines.map { |l| "#{ANSI::CYAN}#{l}#{ANSI::RESET}" }.join("\n") \
+        + "\n#{ANSI::CYAN}└#{bottom}┘#{ANSI::RESET}\n\n"
+    end
+
+    def strip_ansi(str)
+      str.gsub(/\e\[[0-9;]*m/, "")
     end
 
     # Render li children, separating nested lists from inline content

@@ -69,4 +69,14 @@ class TestMarvi < Minitest::Test
     output = @renderer.render("---")
     assert_includes output, "─"
   end
+
+  def test_renders_table
+    md = "| Name  | Age |\n|-------|-----|\n| Alice | 30  |\n"
+    output = @renderer.render(md)
+    assert_includes output, "Name"
+    assert_includes output, "Alice"
+    assert_includes output, "│"
+    assert_includes output, "┌"
+    assert_includes output, "└"
+  end
 end
