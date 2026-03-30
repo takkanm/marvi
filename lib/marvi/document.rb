@@ -14,10 +14,11 @@ module Marvi
   end
 
   class RichLine
-    attr_reader :spans
+    attr_reader :spans, :source_line
 
-    def initialize(spans = [])
+    def initialize(spans = [], source_line: nil)
       @spans = spans
+      @source_line = source_line
     end
 
     def plain_text

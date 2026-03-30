@@ -23,7 +23,7 @@ else
 end
 
 if $stdout.tty?
-  Marvi::Renderer::Curses.new.render(markdown)
+  Marvi::Renderer::Curses.new.render(markdown, file: ARGV[0])
 else
   print Marvi::Renderer::ANSI.new.render(markdown)
 end

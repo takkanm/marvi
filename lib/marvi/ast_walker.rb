@@ -23,7 +23,8 @@ module Marvi
       when :header
         render_header(el)
       when :p
-        [RichLine.new(render_inline_children(el)), RichLine.blank]
+        src = el.options[:location]
+        [RichLine.new(render_inline_children(el), source_line: src), RichLine.blank]
       when :ul
         el.children.flat_map { |child| render_block(child, indent: indent, list_type: :ul) } + [RichLine.blank]
       when :ol
@@ -37,7 +38,8 @@ module Marvi
       when :blockquote
         render_blockquote(el)
       when :hr
-        [RichLine.new([Span.new(text: "─" * 60, color: :cyan)]), RichLine.blank]
+        src = el.options[:location]
+        [RichLine.new([Span.new(text: "─" * 60, color: :cyan)], source_line: src), RichLine.blank]
       when :table
         render_table(el)
       when :blank
@@ -50,17 +52,19 @@ module Marvi
     def render_header(el)
       level = el.options[:level]
       color = HEADER_COLORS[level - 1]
+      src   = el.options[:location]
       prefix = Span.new(text: "#" * level + " ", bold: true, color: color)
       content = render_inline_children(el).map do |s|
         Span.new(text: s.text, bold: true, italic: s.italic, color: s.color || color, bg_color: s.bg_color)
       end
-      [RichLine.new([prefix] + content), RichLine.blank]
+      [RichLine.new([prefix] + content, source_line: src), RichLine.blank]
     end
 
     def render_li(el, indent:, list_type:, list_index:)
       bullet = list_type == :ol ? "#{list_index}." : "•"
       prefix = Span.new(text: "#{"  " * indent}#{bullet} ", color: :cyan)
-      lines = []
+      src    = el.options[:location]
+      lines  = []
 
       el.children.each do |child|
         case child.type
@@ -70,13 +74,13 @@ module Marvi
           lines += nested
         when :p
           if lines.empty?
-            lines << RichLine.new([prefix] + render_inline_children(child))
+            lines << RichLine.new([prefix] + render_inline_children(child), source_line: src)
           else
             lines += render_block(child)
           end
         else
           if lines.empty?
-            lines << RichLine.new([prefix] + render_inline(child))
+            lines << RichLine.new([prefix] + render_inline(child), source_line: src)
           else
             lines << RichLine.new(render_inline(child))
           end
@@ -86,23 +90,27 @@ module Marvi
     end
 
     def render_codeblock(el)
+      src  = el.options[:location]
       lang = el.options[:lang]
       lines = []
-      lines << RichLine.new([Span.new(text: lang, color: :yellow)]) if lang
-      el.value.chomp.split("\n").each do |line|
-        lines << RichLine.new([Span.new(text: "  #{line}", color: :green, bg_color: :dark)])
+      lines << RichLine.new([Span.new(text: lang, color: :yellow)], source_line: src) if lang
+      el.value.chomp.split("\n").each_with_index do |line, i|
+        line_src = src ? src + i + (lang ? 1 : 0) : nil
+        lines << RichLine.new([Span.new(text: "  #{line}", color: :green, bg_color: :dark)], source_line: line_src)
       end
       lines << RichLine.blank
       lines
     end
 
     def render_blockquote(el)
-      inner = el.children.flat_map { |child| render_block(child) }
+      inner  = el.children.flat_map { |child| render_block(child) }
       prefix = Span.new(text: "│ ", color: :cyan)
-      inner.map { |line| RichLine.new([prefix] + line.spans) } + [RichLine.blank]
+      # preserve source_line from inner lines
+      inner.map { |line| RichLine.new([prefix] + line.spans, source_line: line.source_line) } + [RichLine.blank]
     end
 
     def render_table(el)
+      src  = el.options[:location]
       rows = el.children.flat_map(&:children)
       header_row = el.children.find { |s| s.type == :thead }&.children&.first
 
@@ -112,7 +120,7 @@ module Marvi
 
       lines = []
       top = col_widths.map { |w| "─" * (w + 2) }.join("┬")
-      lines << RichLine.new([Span.new(text: "┌#{top}┐", color: :cyan)])
+      lines << RichLine.new([Span.new(text: "┌#{top}┐", color: :cyan)], source_line: src)
 
       rows.each_with_index do |row, ri|
         is_header = row == header_row

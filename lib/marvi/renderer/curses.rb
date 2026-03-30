@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "curses"
+require "shellwords"
 
 module Marvi
   module Renderer
@@ -17,9 +18,11 @@ module Marvi
 
       ITALIC_ATTR = (defined?(::Curses::A_ITALIC) ? ::Curses::A_ITALIC : 0)
 
-      def render(markdown)
-        @lines = ASTWalker.new.walk(markdown)
-        @scroll = 0
+      def render(markdown, file: nil)
+        @file     = file
+        @markdown = markdown
+        @lines    = ASTWalker.new.walk(markdown)
+        @scroll   = 0
 
         ::Curses.init_screen
         ::Curses.start_color
@@ -51,16 +54,66 @@ module Marvi
 
       def handle_key(key)
         case key
-        when "q", "Q", 27                  then throw :quit
-        when "j", ::Curses::Key::DOWN      then scroll_by(1)
-        when "k", ::Curses::Key::UP        then scroll_by(-1)
-        when "d"                           then scroll_by(page_size / 2)
-        when "u"                           then scroll_by(-page_size / 2)
+        when "q", "Q", 27                   then throw :quit
+        when "j", ::Curses::Key::DOWN       then scroll_by(1)
+        when "k", ::Curses::Key::UP         then scroll_by(-1)
+        when "d"                            then scroll_by(page_size / 2)
+        when "u"                            then scroll_by(-page_size / 2)
         when "f", " ", ::Curses::Key::NPAGE then scroll_by(page_size)
-        when "b", ::Curses::Key::PPAGE     then scroll_by(-page_size)
-        when "g"                           then @scroll = 0; draw
-        when "G"                           then @scroll = max_scroll; draw
+        when "b", ::Curses::Key::PPAGE      then scroll_by(-page_size)
+        when "g"                            then @scroll = 0; draw
+        when "G"                            then @scroll = max_scroll; draw
+        when "e"                            then launch_editor if @file
         end
+      end
+
+      def launch_editor
+        editor = ENV["EDITOR"] || ENV["VISUAL"] || "vi"
+        line   = current_source_line
+        cmd    = build_editor_command(editor, @file, line)
+
+        ::Curses.close_screen
+        system(cmd)
+        reload
+        reinit_curses
+        draw
+      end
+
+      def reload
+        @markdown = File.read(@file)
+        @lines    = ASTWalker.new.walk(@markdown)
+        @scroll   = [@scroll, max_scroll].min
+      end
+
+      def reinit_curses
+        ::Curses.init_screen
+        ::Curses.start_color
+        ::Curses.use_default_colors
+        ::Curses.noecho
+        ::Curses.cbreak
+        ::Curses.stdscr.keypad(true)
+        setup_colors
+      end
+
+      def build_editor_command(editor, file, line)
+        base = File.basename(editor.split.first)
+        escaped = Shellwords.escape(file)
+        case base
+        when "code"
+          "#{editor} --goto #{escaped}:#{line}"
+        when "subl", "sublime_text"
+          "#{editor} #{escaped}:#{line}"
+        else
+          # vim, nvim, nano, emacs, micro, etc.
+          "#{editor} +#{line} #{escaped}"
+        end
+      end
+
+      def current_source_line
+        visible_lines.each { |line| return line.source_line if line.source_line }
+        # fall back to searching upward from scroll position
+        @scroll.downto(0) { |i| return @lines[i].source_line if @lines[i]&.source_line }
+        1
       end
 
       def draw
@@ -78,7 +131,8 @@ module Marvi
         ::Curses.attron(::Curses.color_pair(COLOR_PAIRS[:cyan])) do
           top    = @scroll + 1
           bottom = [@scroll + page_size, @lines.size].min
-          status = " #{top}-#{bottom}/#{@lines.size}  j/k scroll  g/G top/bottom  q quit"
+          edit_hint = @file ? "  e edit" : ""
+          status = " #{top}-#{bottom}/#{@lines.size}  j/k scroll  g/G top/bottom#{edit_hint}  q quit"
           ::Curses.addstr(status.ljust(::Curses.cols)[0, ::Curses.cols])
         end
       end
