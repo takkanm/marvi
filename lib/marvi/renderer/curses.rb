@@ -24,7 +24,7 @@ module Marvi
         @lines    = ASTWalker.new.walk(markdown)
         @scroll   = 0
 
-        ::Curses.init_screen
+        with_safe_term { ::Curses.init_screen }
         ::Curses.start_color
         ::Curses.use_default_colors
         ::Curses.noecho
@@ -41,6 +41,16 @@ module Marvi
       end
 
       private
+
+      # xterm-ghostty's `rep` capability mishandles long runs of identical glyphs,
+      # so swap to xterm-256color around initscr to disable that ncurses optimization.
+      def with_safe_term
+        original = ENV["TERM"]
+        ENV["TERM"] = "xterm-256color" if original == "xterm-ghostty"
+        yield
+      ensure
+        ENV["TERM"] = original
+      end
 
       def setup_colors
         ::Curses.init_pair(COLOR_PAIRS[:cyan],          ::Curses::COLOR_CYAN,    -1)
@@ -86,7 +96,7 @@ module Marvi
       end
 
       def reinit_curses
-        ::Curses.init_screen
+        with_safe_term { ::Curses.init_screen }
         ::Curses.start_color
         ::Curses.use_default_colors
         ::Curses.noecho
