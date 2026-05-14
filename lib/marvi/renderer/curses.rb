@@ -42,14 +42,46 @@ module Marvi
 
       private
 
-      # xterm-ghostty's `rep` capability mishandles long runs of identical glyphs,
-      # so swap to xterm-256color around initscr to disable that ncurses optimization.
+      # ncurses uses the terminfo `rep` capability ("ESC[Nb") to compress runs of
+      # identical glyphs, but ghostty mishandles it and drops the run from the
+      # screen — table borders and long padding go missing. The bug surfaces both
+      # under xterm-ghostty directly and inside multiplexers like cmux that ship a
+      # terminfo whose xterm-256color entry advertises `rep`. Detect `rep` in the
+      # active terminfo and swap to a known no-rep alternative around initscr only.
+      REP_SAFE_TERMS = %w[screen-256color tmux-256color xterm-color xterm].freeze
+
       def with_safe_term
         original = ENV["TERM"]
-        ENV["TERM"] = "xterm-256color" if original == "xterm-ghostty"
+        replacement = rep_safe_term_for(original)
+        ENV["TERM"] = replacement if replacement
         yield
       ensure
         ENV["TERM"] = original
+      end
+
+      def rep_safe_term_for(term)
+        return nil if term.nil? || term.empty?
+        return nil unless terminfo_has_rep?(term)
+
+        REP_SAFE_TERMS.find { |candidate| candidate != term && terminfo_exists?(candidate) && !terminfo_has_rep?(candidate) }
+      end
+
+      def terminfo_has_rep?(term)
+        infocmp(term)&.include?("rep=") || false
+      end
+
+      def terminfo_exists?(term)
+        !infocmp(term).nil?
+      end
+
+      def infocmp(term)
+        @infocmp_cache ||= {}
+        return @infocmp_cache[term] if @infocmp_cache.key?(term)
+
+        output = IO.popen(["infocmp", "-1", term, err: File::NULL], &:read)
+        @infocmp_cache[term] = $?.success? ? output : nil
+      rescue StandardError
+        @infocmp_cache[term] = nil
       end
 
       def setup_colors
