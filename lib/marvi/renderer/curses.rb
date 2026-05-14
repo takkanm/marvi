@@ -21,21 +21,13 @@ module Marvi
       FILE_POLL_INTERVAL_MS = 500
 
       def render(markdown, file: nil)
-        @file         = file
-        @markdown     = markdown
-        @lines        = ASTWalker.new.walk(markdown)
-        @scroll       = 0
-        @last_mtime   = current_mtime
-        @file_updated = false
+        @file     = file
+        @markdown = markdown
+        @lines    = ASTWalker.new.walk(markdown)
+        @scroll   = 0
+        mark_reloaded
 
-        with_safe_term { ::Curses.init_screen }
-        ::Curses.start_color
-        ::Curses.use_default_colors
-        ::Curses.noecho
-        ::Curses.cbreak
-        ::Curses.stdscr.keypad(true)
-        ::Curses.stdscr.timeout = FILE_POLL_INTERVAL_MS
-        setup_colors
+        init_curses_state
         draw
 
         catch(:quit) do
@@ -124,8 +116,7 @@ module Marvi
 
       def reload_from_key
         reload
-        @last_mtime   = current_mtime
-        @file_updated = false
+        mark_reloaded
         draw
       end
 
@@ -134,10 +125,17 @@ module Marvi
         mtime = current_mtime
         return if mtime.nil? || mtime == @last_mtime
 
-        @last_mtime   = mtime
+        @last_mtime = mtime
+        return if @file_updated
+
         @file_updated = true
         draw_status_bar
         ::Curses.refresh
+      end
+
+      def mark_reloaded
+        @last_mtime   = current_mtime
+        @file_updated = false
       end
 
       def current_mtime
@@ -155,9 +153,8 @@ module Marvi
         ::Curses.close_screen
         system(cmd)
         reload
-        @last_mtime   = current_mtime
-        @file_updated = false
-        reinit_curses
+        mark_reloaded
+        init_curses_state
         draw
       end
 
@@ -167,7 +164,7 @@ module Marvi
         @scroll   = [@scroll, max_scroll].min
       end
 
-      def reinit_curses
+      def init_curses_state
         with_safe_term { ::Curses.init_screen }
         ::Curses.start_color
         ::Curses.use_default_colors
@@ -216,14 +213,10 @@ module Marvi
         edit_hint = @file ? "  e edit" : ""
         status = " #{top}-#{bottom}/#{@lines.size}  j/k scroll  g/G top/bottom#{edit_hint}  q quit"
         updated_hint = @file_updated ? "  ● updated (r to reload) " : ""
-
-        cols = ::Curses.cols
-        left = status[0, [cols - updated_hint.length, 0].max]
-        padding = " " * [cols - left.length - updated_hint.length, 0].max
+        available = [::Curses.cols - updated_hint.length, 0].max
 
         ::Curses.attron(::Curses.color_pair(COLOR_PAIRS[:cyan])) do
-          ::Curses.addstr(left)
-          ::Curses.addstr(padding)
+          ::Curses.addstr(status.ljust(available)[0, available])
         end
         unless updated_hint.empty?
           ::Curses.attron(::Curses.color_pair(COLOR_PAIRS[:yellow]) | ::Curses::A_BOLD) do
