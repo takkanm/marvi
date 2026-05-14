@@ -18,11 +18,15 @@ module Marvi
 
       ITALIC_ATTR = (defined?(::Curses::A_ITALIC) ? ::Curses::A_ITALIC : 0)
 
+      FILE_POLL_INTERVAL_MS = 500
+
       def render(markdown, file: nil)
-        @file     = file
-        @markdown = markdown
-        @lines    = ASTWalker.new.walk(markdown)
-        @scroll   = 0
+        @file         = file
+        @markdown     = markdown
+        @lines        = ASTWalker.new.walk(markdown)
+        @scroll       = 0
+        @last_mtime   = current_mtime
+        @file_updated = false
 
         with_safe_term { ::Curses.init_screen }
         ::Curses.start_color
@@ -30,11 +34,19 @@ module Marvi
         ::Curses.noecho
         ::Curses.cbreak
         ::Curses.stdscr.keypad(true)
+        ::Curses.stdscr.timeout = FILE_POLL_INTERVAL_MS
         setup_colors
         draw
 
         catch(:quit) do
-          loop { handle_key(::Curses.getch) }
+          loop do
+            key = ::Curses.getch
+            if key.nil? || key == -1
+              check_file_updated
+            else
+              handle_key(key)
+            end
+          end
         end
       ensure
         ::Curses.close_screen
@@ -106,7 +118,33 @@ module Marvi
         when "g"                            then @scroll = 0; draw
         when "G"                            then @scroll = max_scroll; draw
         when "e"                            then launch_editor if @file
+        when "r", "R"                       then reload_from_key if @file
         end
+      end
+
+      def reload_from_key
+        reload
+        @last_mtime   = current_mtime
+        @file_updated = false
+        draw
+      end
+
+      def check_file_updated
+        return unless @file
+        mtime = current_mtime
+        return if mtime.nil? || mtime == @last_mtime
+
+        @last_mtime   = mtime
+        @file_updated = true
+        draw_status_bar
+        ::Curses.refresh
+      end
+
+      def current_mtime
+        return nil unless @file
+        File.mtime(@file)
+      rescue SystemCallError
+        nil
       end
 
       def launch_editor
@@ -117,6 +155,8 @@ module Marvi
         ::Curses.close_screen
         system(cmd)
         reload
+        @last_mtime   = current_mtime
+        @file_updated = false
         reinit_curses
         draw
       end
@@ -134,6 +174,7 @@ module Marvi
         ::Curses.noecho
         ::Curses.cbreak
         ::Curses.stdscr.keypad(true)
+        ::Curses.stdscr.timeout = FILE_POLL_INTERVAL_MS
         setup_colors
       end
 
@@ -170,12 +211,24 @@ module Marvi
 
       def draw_status_bar
         ::Curses.setpos(::Curses.lines - 1, 0)
+        top    = @scroll + 1
+        bottom = [@scroll + page_size, @lines.size].min
+        edit_hint = @file ? "  e edit" : ""
+        status = " #{top}-#{bottom}/#{@lines.size}  j/k scroll  g/G top/bottom#{edit_hint}  q quit"
+        updated_hint = @file_updated ? "  ● updated (r to reload) " : ""
+
+        cols = ::Curses.cols
+        left = status[0, [cols - updated_hint.length, 0].max]
+        padding = " " * [cols - left.length - updated_hint.length, 0].max
+
         ::Curses.attron(::Curses.color_pair(COLOR_PAIRS[:cyan])) do
-          top    = @scroll + 1
-          bottom = [@scroll + page_size, @lines.size].min
-          edit_hint = @file ? "  e edit" : ""
-          status = " #{top}-#{bottom}/#{@lines.size}  j/k scroll  g/G top/bottom#{edit_hint}  q quit"
-          ::Curses.addstr(status.ljust(::Curses.cols)[0, ::Curses.cols])
+          ::Curses.addstr(left)
+          ::Curses.addstr(padding)
+        end
+        unless updated_hint.empty?
+          ::Curses.attron(::Curses.color_pair(COLOR_PAIRS[:yellow]) | ::Curses::A_BOLD) do
+            ::Curses.addstr(updated_hint)
+          end
         end
       end
 
