@@ -23,11 +23,11 @@ module Marvi
       def render(markdown, file: nil)
         @file = file
         @markdown = markdown
-        @lines = ASTWalker.new.walk(markdown)
         @scroll = 0
         mark_reloaded
 
         init_curses_state
+        rewalk
         draw
 
         catch(:quit) do
@@ -113,7 +113,18 @@ module Marvi
                       draw
         when "e" then launch_editor if @file
         when "r", "R" then reload_from_key if @file
+        when ::Curses::Key::RESIZE then handle_resize
         end
+      end
+
+      def handle_resize
+        rewalk
+        @scroll = [@scroll, max_scroll].min
+        draw
+      end
+
+      def rewalk
+        @lines = ASTWalker.new.walk(@markdown, max_width: ::Curses.cols)
       end
 
       def reload_from_key
@@ -154,15 +165,15 @@ module Marvi
 
         ::Curses.close_screen
         system(cmd)
+        init_curses_state
         reload
         mark_reloaded
-        init_curses_state
         draw
       end
 
       def reload
         @markdown = File.read(@file)
-        @lines = ASTWalker.new.walk(@markdown)
+        rewalk
         @scroll = [@scroll, max_scroll].min
       end
 

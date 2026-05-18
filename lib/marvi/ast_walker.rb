@@ -8,7 +8,11 @@ module Marvi
   class ASTWalker
     HEADER_COLORS = %i[cyan green yellow magenta white white].freeze
 
-    def walk(markdown)
+    DEFAULT_MAX_WIDTH = 80
+    MIN_COL_WIDTH = 4
+
+    def walk(markdown, max_width: nil)
+      @max_width = max_width || Integer(ENV["COLUMNS"] || DEFAULT_MAX_WIDTH)
       doc = Kramdown::Document.new(markdown, input: "GFM")
       lines = render_block(doc.root)
       lines.pop while lines.last&.plain_text&.empty?
@@ -118,8 +122,9 @@ module Marvi
       header_row = el.children.find { |s| s.type == :thead }&.children&.first
 
       cell_spans = rows.map { |row| row.children.map { |cell| render_inline_children(cell) } }
-      col_widths = cell_spans.map { |row| row.map { |spans| spans_display_width(spans) } }
+      natural_widths = cell_spans.map { |row| row.map { |spans| spans_display_width(spans) } }
         .transpose.map { |col| col.max }
+      col_widths = shrink_col_widths(natural_widths, @max_width)
 
       lines = []
       top = col_widths.map { |w| "─" * (w + 2) }.join("┬")
@@ -127,16 +132,23 @@ module Marvi
 
       rows.each_with_index do |row, ri|
         is_header = row == header_row
-        row_spans = []
-        row.children.each_with_index do |cell, ci|
+        wrapped = row.children.each_with_index.map do |_cell, ci|
           content = cell_spans[ri][ci]
-          plain_len = spans_display_width(content)
-          padding = col_widths[ci] - plain_len
-          styled = is_header ? content.map { |s| Span.new(text: s.text, bold: true, color: :cyan) } : content
-          row_spans += [Span.new(text: "│ ", color: :cyan)] + styled + [Span.new(text: " " * (padding + 1))]
+          styled = is_header ? content.map { |s| Span.new(text: s.text, bold: true, italic: s.italic, color: :cyan, bg_color: s.bg_color) } : content
+          wrap_spans(styled, col_widths[ci])
         end
-        row_spans << Span.new(text: "│", color: :cyan)
-        lines << RichLine.new(row_spans)
+        sub_row_count = wrapped.map(&:size).max
+        sub_row_count.times do |j|
+          row_spans = []
+          wrapped.each_with_index do |cell_lines, ci|
+            sub_spans = cell_lines[j] || []
+            sub_len = spans_display_width(sub_spans)
+            padding = col_widths[ci] - sub_len
+            row_spans += [Span.new(text: "│ ", color: :cyan)] + sub_spans + [Span.new(text: " " * (padding + 1))]
+          end
+          row_spans << Span.new(text: "│", color: :cyan)
+          lines << RichLine.new(row_spans)
+        end
 
         if is_header
           sep = col_widths.map { |w| "─" * (w + 2) }.join("┼")
@@ -147,6 +159,59 @@ module Marvi
       bottom = col_widths.map { |w| "─" * (w + 2) }.join("┴")
       lines << RichLine.new([Span.new(text: "└#{bottom}┘", color: :cyan)])
       lines << RichLine.blank
+      lines
+    end
+
+    def shrink_col_widths(widths, max_width)
+      budget = max_width - (3 * widths.size + 1)
+      total = widths.sum
+      return widths if total <= budget
+
+      shrunk = widths.dup
+      while total > budget
+        max_w, i = shrunk.each_with_index.max_by { |w, _| w }
+        break if max_w <= MIN_COL_WIDTH
+        shrunk[i] -= 1
+        total -= 1
+      end
+      shrunk
+    end
+
+    def wrap_spans(spans, width)
+      lines = [[]]
+      current_width = 0
+      spans.each do |span|
+        text = span.text.dup
+        until text.empty?
+          remaining = width - current_width
+          if remaining <= 0
+            lines << []
+            current_width = 0
+            remaining = width
+          end
+          taken = 0
+          chunk_width = 0
+          text.each_char do |c|
+            cw = Unicode::DisplayWidth.of(c)
+            break if chunk_width + cw > remaining
+            chunk_width += cw
+            taken += c.bytesize
+          end
+          if taken.zero?
+            first_char = text.each_char.first
+            taken = first_char.bytesize
+            chunk_width = Unicode::DisplayWidth.of(first_char)
+          end
+          chunk = text.byteslice(0, taken)
+          text = text.byteslice(taken..) || ""
+          lines.last << Span.new(text: chunk, bold: span.bold, italic: span.italic, color: span.color, bg_color: span.bg_color)
+          current_width += chunk_width
+          unless text.empty?
+            lines << []
+            current_width = 0
+          end
+        end
+      end
       lines
     end
 

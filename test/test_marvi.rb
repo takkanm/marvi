@@ -89,4 +89,28 @@ class TestMarvi < Minitest::Test
     widths = border_lines.map { |l| Unicode::DisplayWidth.of(l.gsub(/\e\[[\d;]+m/, "")) }
     assert_equal 1, widths.uniq.size, "Table border lines must share the same display width"
   end
+
+  def test_table_wraps_long_cell_within_max_width
+    max_width = 40
+    md = "| 項目 | 説明 |\n|------|------|\n" \
+         "| 詳細 | これは非常に長い日本語の文章なので折り返しが必要になります。 |\n"
+    lines = Marvi::ASTWalker.new.walk(md, max_width: max_width)
+    plain_lines = lines.map(&:plain_text).reject(&:empty?)
+
+    plain_lines.each do |line|
+      assert_operator Unicode::DisplayWidth.of(line), :<=, max_width,
+        "line exceeds max_width: #{line.inspect}"
+    end
+
+    border_lines = plain_lines.select { |l| l.start_with?("┌", "├", "└") }
+    border_widths = border_lines.map { |l| Unicode::DisplayWidth.of(l) }
+    assert_equal 1, border_widths.uniq.size, "borders must share width"
+
+    body_lines = plain_lines.select { |l| l.start_with?("│") }
+    body_widths = body_lines.map { |l| Unicode::DisplayWidth.of(l) }
+    assert_equal 1, body_widths.uniq.size, "body rows must share width"
+    assert_equal border_widths.first, body_widths.first, "borders and body must align"
+
+    assert_operator body_lines.size, :>=, 3, "long cell must wrap into multiple visual rows"
+  end
 end

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "io/console"
+
 module Marvi
   module Renderer
     class ANSI
@@ -12,11 +14,17 @@ module Marvi
       }.freeze
 
       def render(markdown)
-        lines = ASTWalker.new.walk(markdown)
+        lines = ASTWalker.new.walk(markdown, max_width: terminal_width)
         lines.map { |line| render_line(line) }.join("\n") + "\n"
       end
 
       private
+
+      def terminal_width
+        IO.console&.winsize&.last || Integer(ENV["COLUMNS"] || ASTWalker::DEFAULT_MAX_WIDTH)
+      rescue
+        ASTWalker::DEFAULT_MAX_WIDTH
+      end
 
       def render_line(line)
         line.spans.map { |span| render_span(span) }.join
