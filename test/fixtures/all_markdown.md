@@ -179,6 +179,14 @@ ls -la
 | Very long     | This is a significantly longer cell value used to test wide column layout | The quick brown fox jumps over   |
 | Mixed widths  | Column widths should adapt to the longest content in each column          | Lazy dog                         |
 
+### Multibyte (CJK) Table with Long Content
+
+| 項目     | 説明                                                                                                                                                                                       | 担当者       |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ |
+| 概要     | マルチバイト文字を含む表の描画を検証するテストケース                                                                                                                                       | 田中 太郎    |
+| 詳細説明 | この行は意図的に非常に長い日本語の文章を含んでおり、標準的なターミナル幅(80 桁)を確実に超えて折り返しが必要になることを想定しています。罫線の整列、padding の計算、そして折り返し時の挙動を一度に検証するための行です。 | 佐藤 花子    |
+| 備考     | 絵文字 🍣🎉 や全角記号「」『』、半角と全角の混在 (Ruby と るびー) なども含めて確認します                                                                                                   | 鈴木 一郎    |
+
 ### Numeric / Financial Table
 
 | Quarter | Revenue (¥M) | Expenses (¥M) | Profit (¥M) | Growth (%) |
