@@ -4,11 +4,11 @@ module Marvi
   module Renderer
     class ANSI
       COLOR_MAP = {
-        cyan:    Marvi::ANSI::CYAN,
-        green:   Marvi::ANSI::GREEN,
-        yellow:  Marvi::ANSI::YELLOW,
+        cyan: Marvi::ANSI::CYAN,
+        green: Marvi::ANSI::GREEN,
+        yellow: Marvi::ANSI::YELLOW,
         magenta: Marvi::ANSI::MAGENTA,
-        white:   Marvi::ANSI::WHITE
+        white: Marvi::ANSI::WHITE
       }.freeze
 
       def render(markdown)

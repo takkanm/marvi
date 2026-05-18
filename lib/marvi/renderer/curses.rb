@@ -7,13 +7,13 @@ module Marvi
   module Renderer
     class Curses
       COLOR_PAIRS = {
-        cyan:          1,
-        green:         2,
-        yellow:        3,
-        magenta:       4,
-        white:         5,
+        cyan: 1,
+        green: 2,
+        yellow: 3,
+        magenta: 4,
+        white: 5,
         green_on_dark: 6,
-        cyan_on_dark:  7
+        cyan_on_dark: 7
       }.freeze
 
       ITALIC_ATTR = (defined?(::Curses::A_ITALIC) ? ::Curses::A_ITALIC : 0)
@@ -21,10 +21,10 @@ module Marvi
       FILE_POLL_INTERVAL_MS = 500
 
       def render(markdown, file: nil)
-        @file     = file
+        @file = file
         @markdown = markdown
-        @lines    = ASTWalker.new.walk(markdown)
-        @scroll   = 0
+        @lines = ASTWalker.new.walk(markdown)
+        @scroll = 0
         mark_reloaded
 
         init_curses_state
@@ -84,33 +84,35 @@ module Marvi
 
         output = IO.popen(["infocmp", "-1", term, err: File::NULL], &:read)
         @infocmp_cache[term] = $?.success? ? output : nil
-      rescue StandardError
+      rescue
         @infocmp_cache[term] = nil
       end
 
       def setup_colors
-        ::Curses.init_pair(COLOR_PAIRS[:cyan],          ::Curses::COLOR_CYAN,    -1)
-        ::Curses.init_pair(COLOR_PAIRS[:green],         ::Curses::COLOR_GREEN,   -1)
-        ::Curses.init_pair(COLOR_PAIRS[:yellow],        ::Curses::COLOR_YELLOW,  -1)
-        ::Curses.init_pair(COLOR_PAIRS[:magenta],       ::Curses::COLOR_MAGENTA, -1)
-        ::Curses.init_pair(COLOR_PAIRS[:white],         ::Curses::COLOR_WHITE,   -1)
-        ::Curses.init_pair(COLOR_PAIRS[:green_on_dark], ::Curses::COLOR_GREEN,   ::Curses::COLOR_BLACK)
-        ::Curses.init_pair(COLOR_PAIRS[:cyan_on_dark],  ::Curses::COLOR_CYAN,    ::Curses::COLOR_BLACK)
+        ::Curses.init_pair(COLOR_PAIRS[:cyan], ::Curses::COLOR_CYAN, -1)
+        ::Curses.init_pair(COLOR_PAIRS[:green], ::Curses::COLOR_GREEN, -1)
+        ::Curses.init_pair(COLOR_PAIRS[:yellow], ::Curses::COLOR_YELLOW, -1)
+        ::Curses.init_pair(COLOR_PAIRS[:magenta], ::Curses::COLOR_MAGENTA, -1)
+        ::Curses.init_pair(COLOR_PAIRS[:white], ::Curses::COLOR_WHITE, -1)
+        ::Curses.init_pair(COLOR_PAIRS[:green_on_dark], ::Curses::COLOR_GREEN, ::Curses::COLOR_BLACK)
+        ::Curses.init_pair(COLOR_PAIRS[:cyan_on_dark], ::Curses::COLOR_CYAN, ::Curses::COLOR_BLACK)
       end
 
       def handle_key(key)
         case key
-        when "q", "Q", 27                   then throw :quit
-        when "j", ::Curses::Key::DOWN       then scroll_by(1)
-        when "k", ::Curses::Key::UP         then scroll_by(-1)
-        when "d"                            then scroll_by(page_size / 2)
-        when "u"                            then scroll_by(-page_size / 2)
+        when "q", "Q", 27 then throw :quit
+        when "j", ::Curses::Key::DOWN then scroll_by(1)
+        when "k", ::Curses::Key::UP then scroll_by(-1)
+        when "d" then scroll_by(page_size / 2)
+        when "u" then scroll_by(-page_size / 2)
         when "f", " ", ::Curses::Key::NPAGE then scroll_by(page_size)
-        when "b", ::Curses::Key::PPAGE      then scroll_by(-page_size)
-        when "g"                            then @scroll = 0; draw
-        when "G"                            then @scroll = max_scroll; draw
-        when "e"                            then launch_editor if @file
-        when "r", "R"                       then reload_from_key if @file
+        when "b", ::Curses::Key::PPAGE then scroll_by(-page_size)
+        when "g" then @scroll = 0
+                      draw
+        when "G" then @scroll = max_scroll
+                      draw
+        when "e" then launch_editor if @file
+        when "r", "R" then reload_from_key if @file
         end
       end
 
@@ -134,7 +136,7 @@ module Marvi
       end
 
       def mark_reloaded
-        @last_mtime   = current_mtime
+        @last_mtime = current_mtime
         @file_updated = false
       end
 
@@ -147,8 +149,8 @@ module Marvi
 
       def launch_editor
         editor = ENV["EDITOR"] || ENV["VISUAL"] || "vi"
-        line   = current_source_line
-        cmd    = build_editor_command(editor, @file, line)
+        line = current_source_line
+        cmd = build_editor_command(editor, @file, line)
 
         ::Curses.close_screen
         system(cmd)
@@ -160,8 +162,8 @@ module Marvi
 
       def reload
         @markdown = File.read(@file)
-        @lines    = ASTWalker.new.walk(@markdown)
-        @scroll   = [@scroll, max_scroll].min
+        @lines = ASTWalker.new.walk(@markdown)
+        @scroll = [@scroll, max_scroll].min
       end
 
       def init_curses_state
@@ -208,7 +210,7 @@ module Marvi
 
       def draw_status_bar
         ::Curses.setpos(::Curses.lines - 1, 0)
-        top    = @scroll + 1
+        top = @scroll + 1
         bottom = [@scroll + page_size, @lines.size].min
         edit_hint = @file ? "  e edit" : ""
         status = " #{top}-#{bottom}/#{@lines.size}  j/k scroll  g/G top/bottom#{edit_hint}  q quit"
@@ -245,10 +247,10 @@ module Marvi
       def build_attr(span)
         attr = 0
         attr |= ::Curses::A_BOLD if span.bold
-        attr |= ITALIC_ATTR      if span.italic
+        attr |= ITALIC_ATTR if span.italic
 
         pair_key = if span.bg_color == :dark
-          span.color == :cyan ? :cyan_on_dark : :green_on_dark
+          (span.color == :cyan) ? :cyan_on_dark : :green_on_dark
         elsif span.color
           span.color
         end
@@ -270,7 +272,7 @@ module Marvi
       end
 
       def scroll_by(delta)
-        @scroll = [[@scroll + delta, 0].max, max_scroll].min
+        @scroll = (@scroll + delta).clamp(0, max_scroll)
         draw
       end
     end

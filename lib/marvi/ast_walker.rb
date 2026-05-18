@@ -53,7 +53,7 @@ module Marvi
     def render_header(el)
       level = el.options[:level]
       color = HEADER_COLORS[level - 1]
-      src   = el.options[:location]
+      src = el.options[:location]
       prefix = Span.new(text: "#" * level + " ", bold: true, color: color)
       content = render_inline_children(el).map do |s|
         Span.new(text: s.text, bold: true, italic: s.italic, color: s.color || color, bg_color: s.bg_color)
@@ -62,10 +62,10 @@ module Marvi
     end
 
     def render_li(el, indent:, list_type:, list_index:)
-      bullet = list_type == :ol ? "#{list_index}." : "•"
+      bullet = (list_type == :ol) ? "#{list_index}." : "•"
       prefix = Span.new(text: "#{"  " * indent}#{bullet} ", color: :cyan)
-      src    = el.options[:location]
-      lines  = []
+      src = el.options[:location]
+      lines = []
 
       el.children.each do |child|
         case child.type
@@ -80,10 +80,10 @@ module Marvi
             lines += render_block(child)
           end
         else
-          if lines.empty?
-            lines << RichLine.new([prefix] + render_inline(child), source_line: src)
+          lines << if lines.empty?
+            RichLine.new([prefix] + render_inline(child), source_line: src)
           else
-            lines << RichLine.new(render_inline(child))
+            RichLine.new(render_inline(child))
           end
         end
       end
@@ -91,12 +91,14 @@ module Marvi
     end
 
     def render_codeblock(el)
-      src  = el.options[:location]
+      src = el.options[:location]
       lang = el.options[:lang]
       lines = []
       lines << RichLine.new([Span.new(text: lang, color: :yellow)], source_line: src) if lang
       el.value.chomp.split("\n").each_with_index do |line, i|
-        line_src = src ? src + i + (lang ? 1 : 0) : nil
+        line_src = if src
+          src + i + (lang ? 1 : 0)
+        end
         lines << RichLine.new([Span.new(text: "  #{line}", color: :green, bg_color: :dark)], source_line: line_src)
       end
       lines << RichLine.blank
@@ -104,14 +106,14 @@ module Marvi
     end
 
     def render_blockquote(el)
-      inner  = el.children.flat_map { |child| render_block(child) }
+      inner = el.children.flat_map { |child| render_block(child) }
       prefix = Span.new(text: "│ ", color: :cyan)
       # preserve source_line from inner lines
       inner.map { |line| RichLine.new([prefix] + line.spans, source_line: line.source_line) } + [RichLine.blank]
     end
 
     def render_table(el)
-      src  = el.options[:location]
+      src = el.options[:location]
       rows = el.children.flat_map(&:children)
       header_row = el.children.find { |s| s.type == :thead }&.children&.first
 
