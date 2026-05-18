@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-18
+
+- Bind `Ctrl-D` / `Ctrl-U` for vim-style half-page scrolling in the curses pager.
+
 ## [0.3.0] - 2026-05-18
 
 - Render tables correctly when cells contain East Asian wide characters and emoji (uses `unicode-display_width`).
