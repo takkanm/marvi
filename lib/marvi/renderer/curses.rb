@@ -20,6 +20,9 @@ module Marvi
 
       FILE_POLL_INTERVAL_MS = 500
 
+      CTRL_D = 4
+      CTRL_U = 21
+
       def render(markdown, file: nil)
         @file = file
         @markdown = markdown
@@ -103,8 +106,8 @@ module Marvi
         when "q", "Q", 27 then throw :quit
         when "j", ::Curses::Key::DOWN then scroll_by(1)
         when "k", ::Curses::Key::UP then scroll_by(-1)
-        when "d" then scroll_by(page_size / 2)
-        when "u" then scroll_by(-page_size / 2)
+        when "d", CTRL_D then scroll_by(page_size / 2)
+        when "u", CTRL_U then scroll_by(-page_size / 2)
         when "f", " ", ::Curses::Key::NPAGE then scroll_by(page_size)
         when "b", ::Curses::Key::PPAGE then scroll_by(-page_size)
         when "g" then @scroll = 0
