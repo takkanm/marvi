@@ -80,4 +80,13 @@ class TestMarvi < Minitest::Test
     assert_includes output, "┌"
     assert_includes output, "└"
   end
+
+  def test_renders_table_with_multibyte_content
+    md = "| 名前 | 年齢 |\n|------|------|\n| 田中 | 30   |\n| ボブ | 25   |\n"
+    output = @renderer.render(md)
+
+    border_lines = output.split("\n").select { |l| l.match?(/\A\e\[[\d;]+m[┌├└]/) }
+    widths = border_lines.map { |l| Unicode::DisplayWidth.of(l.gsub(/\e\[[\d;]+m/, "")) }
+    assert_equal 1, widths.uniq.size, "Table border lines must share the same display width"
+  end
 end

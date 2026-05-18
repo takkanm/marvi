@@ -2,6 +2,7 @@
 
 require "kramdown"
 require "kramdown-parser-gfm"
+require "unicode/display_width"
 
 module Marvi
   class ASTWalker
@@ -115,7 +116,7 @@ module Marvi
       header_row = el.children.find { |s| s.type == :thead }&.children&.first
 
       cell_spans = rows.map { |row| row.children.map { |cell| render_inline_children(cell) } }
-      col_widths = cell_spans.map { |row| row.map { |spans| spans.sum { |s| s.text.length } } }
+      col_widths = cell_spans.map { |row| row.map { |spans| spans_display_width(spans) } }
         .transpose.map { |col| col.max }
 
       lines = []
@@ -127,7 +128,7 @@ module Marvi
         row_spans = []
         row.children.each_with_index do |cell, ci|
           content = cell_spans[ri][ci]
-          plain_len = content.sum { |s| s.text.length }
+          plain_len = spans_display_width(content)
           padding = col_widths[ci] - plain_len
           styled = is_header ? content.map { |s| Span.new(text: s.text, bold: true, color: :cyan) } : content
           row_spans += [Span.new(text: "│ ", color: :cyan)] + styled + [Span.new(text: " " * (padding + 1))]
@@ -145,6 +146,10 @@ module Marvi
       lines << RichLine.new([Span.new(text: "└#{bottom}┘", color: :cyan)])
       lines << RichLine.blank
       lines
+    end
+
+    def spans_display_width(spans)
+      spans.sum { |s| Unicode::DisplayWidth.of(s.text) }
     end
 
     def render_inline_children(el)
