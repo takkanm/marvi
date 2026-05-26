@@ -90,6 +90,93 @@ class TestMarvi < Minitest::Test
     assert_equal 1, widths.uniq.size, "Table border lines must share the same display width"
   end
 
+  def test_long_bullet_item_wraps_within_max_width
+    max_width = 40
+    md = "- これは非常に長い箇条書きの項目で画面幅を超えるはずなので折り返しが必要になります\n"
+    lines = Marvi::ASTWalker.new.walk(md, max_width: max_width)
+    plain_lines = lines.map(&:plain_text).reject(&:empty?)
+
+    plain_lines.each do |line|
+      assert_operator Unicode::DisplayWidth.of(line), :<=, max_width,
+        "line exceeds max_width: #{line.inspect}"
+    end
+    assert_operator plain_lines.size, :>=, 2, "long bullet must wrap into multiple lines"
+    assert plain_lines.first.start_with?("• "), "first line must keep the bullet marker"
+    plain_lines[1..].each do |line|
+      refute line.start_with?("•"), "continuation lines must not start with a bullet: #{line.inspect}"
+      assert line.start_with?("  "), "continuation lines must be indented under the bullet content: #{line.inspect}"
+    end
+  end
+
+  def test_long_ordered_list_item_wraps_within_max_width
+    max_width = 40
+    md = "1. これは非常に長い番号付きリストの項目で画面幅を超えるはずなので折り返しが必要になります\n"
+    lines = Marvi::ASTWalker.new.walk(md, max_width: max_width)
+    plain_lines = lines.map(&:plain_text).reject(&:empty?)
+
+    plain_lines.each do |line|
+      assert_operator Unicode::DisplayWidth.of(line), :<=, max_width,
+        "line exceeds max_width: #{line.inspect}"
+    end
+    assert plain_lines.first.start_with?("1. "), "first line must keep the ordered marker"
+    assert_operator plain_lines.size, :>=, 2, "long ordered item must wrap into multiple lines"
+  end
+
+  def test_nested_list_item_wraps_with_hanging_indent
+    max_width = 40
+    md = "- outer\n  - これは長いネストされた項目で画面幅を超えるはずなので折り返しが必要になります\n"
+    lines = Marvi::ASTWalker.new.walk(md, max_width: max_width)
+    plain_lines = lines.map(&:plain_text).reject(&:empty?)
+
+    plain_lines.each do |line|
+      assert_operator Unicode::DisplayWidth.of(line), :<=, max_width,
+        "line exceeds max_width: #{line.inspect}"
+    end
+    nested_first = plain_lines.find { |l| l.include?("これは長い") }
+    assert nested_first&.start_with?("  • "), "nested bullet must be indented under outer item: #{nested_first.inspect}"
+  end
+
+  def test_long_paragraph_wraps_within_max_width
+    max_width = 40
+    md = "これは非常に長い段落で画面幅を超えるはずなので折り返しが必要になります。\n"
+    lines = Marvi::ASTWalker.new.walk(md, max_width: max_width)
+    plain_lines = lines.map(&:plain_text).reject(&:empty?)
+
+    plain_lines.each do |line|
+      assert_operator Unicode::DisplayWidth.of(line), :<=, max_width,
+        "line exceeds max_width: #{line.inspect}"
+    end
+    assert_operator plain_lines.size, :>=, 2, "long paragraph must wrap into multiple lines"
+  end
+
+  def test_long_header_wraps_within_max_width
+    max_width = 40
+    md = "# これは非常に長い見出しで画面幅を超えるはずなので折り返しが必要です\n"
+    lines = Marvi::ASTWalker.new.walk(md, max_width: max_width)
+    plain_lines = lines.map(&:plain_text).reject(&:empty?)
+
+    plain_lines.each do |line|
+      assert_operator Unicode::DisplayWidth.of(line), :<=, max_width,
+        "line exceeds max_width: #{line.inspect}"
+    end
+    assert plain_lines.first.start_with?("# "), "first line must keep the # marker"
+    assert_operator plain_lines.size, :>=, 2, "long header must wrap into multiple lines"
+  end
+
+  def test_long_blockquote_wraps_within_max_width
+    max_width = 40
+    md = "> これは非常に長い引用文で画面幅を超えるはずなので折り返しが必要になります。\n"
+    lines = Marvi::ASTWalker.new.walk(md, max_width: max_width)
+    plain_lines = lines.map(&:plain_text).reject(&:empty?)
+
+    plain_lines.each do |line|
+      assert_operator Unicode::DisplayWidth.of(line), :<=, max_width,
+        "line exceeds max_width: #{line.inspect}"
+      assert line.start_with?("│"), "every blockquote line must start with the │ prefix: #{line.inspect}"
+    end
+    assert_operator plain_lines.size, :>=, 2, "long blockquote must wrap into multiple lines"
+  end
+
   def test_table_wraps_long_cell_within_max_width
     max_width = 40
     md = "| 項目 | 説明 |\n|------|------|\n" \

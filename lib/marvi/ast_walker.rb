@@ -29,7 +29,8 @@ module Marvi
         render_header(el)
       when :p
         src = el.options[:location]
-        [RichLine.new(render_inline_children(el), source_line: src), RichLine.blank]
+        wrapped = wrap_spans(render_inline_children(el), @max_width)
+        wrapped.each_with_index.map { |spans, i| RichLine.new(spans, source_line: (i.zero? ? src : nil)) } + [RichLine.blank]
       when :ul
         el.children.flat_map { |child| render_block(child, indent: indent, list_type: :ul) } + [RichLine.blank]
       when :ol
@@ -62,12 +63,15 @@ module Marvi
       content = render_inline_children(el).map do |s|
         Span.new(text: s.text, bold: true, italic: s.italic, color: s.color || color, bg_color: s.bg_color)
       end
-      [RichLine.new([prefix] + content, source_line: src), RichLine.blank]
+      wrap_with_prefix([prefix], content, @max_width, source_line: src) + [RichLine.blank]
     end
 
     def render_li(el, indent:, list_type:, list_index:)
       bullet = (list_type == :ol) ? "#{list_index}." : "•"
       prefix = Span.new(text: "#{"  " * indent}#{bullet} ", color: :cyan)
+      prefix_width = spans_display_width([prefix])
+      hanging = Span.new(text: " " * prefix_width)
+      inner_width = [@max_width - prefix_width, MIN_COL_WIDTH].max
       src = el.options[:location]
       lines = []
 
@@ -78,16 +82,25 @@ module Marvi
           nested.pop while nested.last&.plain_text&.empty?
           lines += nested
         when :p
+          content_spans = render_inline_children(child)
           if lines.empty?
-            lines << RichLine.new([prefix] + render_inline_children(child), source_line: src)
+            lines += wrap_with_prefix([prefix], content_spans, @max_width, source_line: src)
           else
-            lines += render_block(child)
+            child_src = child.options[:location]
+            wrapped = wrap_spans(content_spans, inner_width)
+            wrapped.each_with_index do |spans, i|
+              lines << RichLine.new([hanging] + spans, source_line: (i.zero? ? child_src : nil))
+            end
+            lines << RichLine.blank
           end
         else
-          lines << if lines.empty?
-            RichLine.new([prefix] + render_inline(child), source_line: src)
+          content_spans = render_inline(child)
+          if lines.empty?
+            lines += wrap_with_prefix([prefix], content_spans, @max_width, source_line: src)
           else
-            RichLine.new(render_inline(child))
+            wrap_spans(content_spans, inner_width).each do |spans|
+              lines << RichLine.new([hanging] + spans)
+            end
           end
         end
       end
@@ -110,9 +123,14 @@ module Marvi
     end
 
     def render_blockquote(el)
-      inner = el.children.flat_map { |child| render_block(child) }
       prefix = Span.new(text: "│ ", color: :cyan)
-      # preserve source_line from inner lines
+      prefix_width = spans_display_width([prefix])
+      # Reduce @max_width while rendering inner content so the │ prefix fits within @max_width
+      # without forcing a second wrap pass on already-wrapped lines.
+      saved_width = @max_width
+      @max_width = [saved_width - prefix_width, MIN_COL_WIDTH].max
+      inner = el.children.flat_map { |child| render_block(child) }
+      @max_width = saved_width
       inner.map { |line| RichLine.new([prefix] + line.spans, source_line: line.source_line) } + [RichLine.blank]
     end
 
@@ -175,6 +193,17 @@ module Marvi
         total -= 1
       end
       shrunk
+    end
+
+    def wrap_with_prefix(prefix_spans, content_spans, max_width, source_line: nil)
+      prefix_width = spans_display_width(prefix_spans)
+      inner_width = [max_width - prefix_width, MIN_COL_WIDTH].max
+      wrapped = wrap_spans(content_spans, inner_width)
+      indent = Span.new(text: " " * prefix_width)
+      wrapped.each_with_index.map do |spans, i|
+        line_prefix = i.zero? ? prefix_spans : [indent]
+        RichLine.new(line_prefix + spans, source_line: (i.zero? ? source_line : nil))
+      end
     end
 
     def wrap_spans(spans, width)
