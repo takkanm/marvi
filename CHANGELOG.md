@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+## [0.4.1] - 2026-05-26
+
+- Wrap long text in bulleted/ordered lists, paragraphs, headers, and blockquotes so it no longer overflows the terminal width. List items and headers use a hanging indent for continuation lines. (#1)
+
 ## [0.4.0] - 2026-05-18
 
 - Bind `Ctrl-D` / `Ctrl-U` for vim-style half-page scrolling in the curses pager.
