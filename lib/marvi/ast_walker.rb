@@ -131,7 +131,24 @@ module Marvi
       @max_width = [saved_width - prefix_width, MIN_COL_WIDTH].max
       inner = el.children.flat_map { |child| render_block(child) }
       @max_width = saved_width
+      # Trim trailing blanks and collapse runs of blanks so the │ prefix doesn't produce
+      # dangling/duplicated "│ " lines (kramdown emits both :p trailing blanks and explicit
+      # :blank elements between siblings).
+      inner.pop while inner.last&.plain_text&.empty?
+      inner = collapse_consecutive_blanks(inner)
       inner.map { |line| RichLine.new([prefix] + line.spans, source_line: line.source_line) } + [RichLine.blank]
+    end
+
+    def collapse_consecutive_blanks(lines)
+      out = []
+      prev_blank = false
+      lines.each do |line|
+        is_blank = line.plain_text.empty?
+        next if is_blank && prev_blank
+        out << line
+        prev_blank = is_blank
+      end
+      out
     end
 
     def render_table(el)
