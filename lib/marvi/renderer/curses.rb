@@ -23,6 +23,9 @@ module Marvi
       CTRL_D = 4
       CTRL_U = 21
 
+      MIN_HORIZONTAL_PADDING = 2
+      HORIZONTAL_PADDING_DIVISOR = 12
+
       def render(markdown, file: nil)
         @file = file
         @markdown = markdown
@@ -127,7 +130,17 @@ module Marvi
       end
 
       def rewalk
-        @lines = ASTWalker.new.walk(@markdown, max_width: ::Curses.cols)
+        @lines = ASTWalker.new.walk(@markdown, max_width: content_width)
+      end
+
+      def horizontal_padding
+        cols = ::Curses.cols
+        return 0 if cols <= MIN_HORIZONTAL_PADDING * 2
+        [MIN_HORIZONTAL_PADDING, cols / HORIZONTAL_PADDING_DIVISOR].max
+      end
+
+      def content_width
+        [::Curses.cols - horizontal_padding * 2, 1].max
       end
 
       def reload_from_key
@@ -214,8 +227,9 @@ module Marvi
 
       def draw
         ::Curses.clear
+        padding = horizontal_padding
         visible_lines.each_with_index do |line, row|
-          ::Curses.setpos(row, 0)
+          ::Curses.setpos(row, padding)
           render_line(line)
         end
         draw_status_bar
