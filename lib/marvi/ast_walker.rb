@@ -16,7 +16,7 @@ module Marvi
       doc = Kramdown::Document.new(markdown, input: "GFM")
       lines = render_block(doc.root)
       lines.pop while lines.last&.plain_text&.empty?
-      lines
+      collapse_consecutive_blanks(lines)
     end
 
     private
