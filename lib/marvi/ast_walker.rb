@@ -210,34 +210,43 @@ module Marvi
       lines = [[]]
       current_width = 0
       spans.each do |span|
-        text = span.text.dup
-        until text.empty?
-          remaining = width - current_width
-          if remaining <= 0
+        # Split on \n so embedded hard line breaks become separate RichLines downstream,
+        # otherwise Curses.addstr resets the cursor to column 0 and bypasses padding/prefix.
+        parts = span.text.split("\n", -1)
+        parts.each_with_index do |part, idx|
+          if idx > 0 && !lines.last.empty?
             lines << []
             current_width = 0
-            remaining = width
           end
-          taken = 0
-          chunk_width = 0
-          text.each_char do |c|
-            cw = Unicode::DisplayWidth.of(c)
-            break if chunk_width + cw > remaining
-            chunk_width += cw
-            taken += c.bytesize
-          end
-          if taken.zero?
-            first_char = text.each_char.first
-            taken = first_char.bytesize
-            chunk_width = Unicode::DisplayWidth.of(first_char)
-          end
-          chunk = text.byteslice(0, taken)
-          text = text.byteslice(taken..) || ""
-          lines.last << Span.new(text: chunk, bold: span.bold, italic: span.italic, color: span.color, bg_color: span.bg_color)
-          current_width += chunk_width
-          unless text.empty?
-            lines << []
-            current_width = 0
+          text = part.dup
+          until text.empty?
+            remaining = width - current_width
+            if remaining <= 0
+              lines << []
+              current_width = 0
+              remaining = width
+            end
+            taken = 0
+            chunk_width = 0
+            text.each_char do |c|
+              cw = Unicode::DisplayWidth.of(c)
+              break if chunk_width + cw > remaining
+              chunk_width += cw
+              taken += c.bytesize
+            end
+            if taken.zero?
+              first_char = text.each_char.first
+              taken = first_char.bytesize
+              chunk_width = Unicode::DisplayWidth.of(first_char)
+            end
+            chunk = text.byteslice(0, taken)
+            text = text.byteslice(taken..) || ""
+            lines.last << Span.new(text: chunk, bold: span.bold, italic: span.italic, color: span.color, bg_color: span.bg_color)
+            current_width += chunk_width
+            unless text.empty?
+              lines << []
+              current_width = 0
+            end
           end
         end
       end
