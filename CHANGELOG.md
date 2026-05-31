@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+## [0.4.2] - 2026-05-31
+
+- Add left/right padding in the curses pager so content no longer sits flush against the terminal edges. Padding scales with terminal width.
+- Render every line of a multi-line blockquote with its `│ ` prefix.
+- Stop emitting an empty `│ ` line at the end of blockquotes.
+- Collapse consecutive blank lines so block-level elements are separated by a single blank line.
+
 ## [0.4.1] - 2026-05-26
 
 - Wrap long text in bulleted/ordered lists, paragraphs, headers, and blockquotes so it no longer overflows the terminal width. List items and headers use a hanging indent for continuation lines. (#1)
