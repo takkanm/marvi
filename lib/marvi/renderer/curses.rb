@@ -12,8 +12,11 @@ module Marvi
         yellow: 3,
         magenta: 4,
         white: 5,
-        green_on_dark: 6,
-        cyan_on_dark: 7
+        cyan_on_dark: 6,
+        green_on_dark: 7,
+        yellow_on_dark: 8,
+        magenta_on_dark: 9,
+        white_on_dark: 10
       }.freeze
 
       ITALIC_ATTR = (defined?(::Curses::A_ITALIC) ? ::Curses::A_ITALIC : 0)
@@ -100,8 +103,11 @@ module Marvi
         ::Curses.init_pair(COLOR_PAIRS[:yellow], ::Curses::COLOR_YELLOW, -1)
         ::Curses.init_pair(COLOR_PAIRS[:magenta], ::Curses::COLOR_MAGENTA, -1)
         ::Curses.init_pair(COLOR_PAIRS[:white], ::Curses::COLOR_WHITE, -1)
-        ::Curses.init_pair(COLOR_PAIRS[:green_on_dark], ::Curses::COLOR_GREEN, ::Curses::COLOR_BLACK)
         ::Curses.init_pair(COLOR_PAIRS[:cyan_on_dark], ::Curses::COLOR_CYAN, ::Curses::COLOR_BLACK)
+        ::Curses.init_pair(COLOR_PAIRS[:green_on_dark], ::Curses::COLOR_GREEN, ::Curses::COLOR_BLACK)
+        ::Curses.init_pair(COLOR_PAIRS[:yellow_on_dark], ::Curses::COLOR_YELLOW, ::Curses::COLOR_BLACK)
+        ::Curses.init_pair(COLOR_PAIRS[:magenta_on_dark], ::Curses::COLOR_MAGENTA, ::Curses::COLOR_BLACK)
+        ::Curses.init_pair(COLOR_PAIRS[:white_on_dark], ::Curses::COLOR_WHITE, ::Curses::COLOR_BLACK)
       end
 
       def handle_key(key)
@@ -278,7 +284,7 @@ module Marvi
         attr |= ITALIC_ATTR if span.italic
 
         pair_key = if span.bg_color == :dark
-          (span.color == :cyan) ? :cyan_on_dark : :green_on_dark
+          :"#{span.color || :green}_on_dark"
         elsif span.color
           span.color
         end
