@@ -112,11 +112,15 @@ module Marvi
       lang = el.options[:lang]
       lines = []
       lines << RichLine.new([Span.new(text: lang, color: :yellow)], source_line: src) if lang
-      el.value.chomp.split("\n").each_with_index do |line, i|
-        line_src = if src
-          src + i + (lang ? 1 : 0)
+
+      code = el.value.chomp
+      unless code.empty?
+        line_offset = lang ? 1 : 0
+        indent = Span.new(text: "  ", bg_color: :dark)
+        Highlighter.lines(code, lang).each_with_index do |spans, i|
+          line_src = src ? src + i + line_offset : nil
+          lines << RichLine.new([indent] + spans, source_line: line_src)
         end
-        lines << RichLine.new([Span.new(text: "  #{line}", color: :green, bg_color: :dark)], source_line: line_src)
       end
       lines << RichLine.blank
       lines

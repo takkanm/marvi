@@ -43,7 +43,8 @@ class TestMarvi < Minitest::Test
 
   def test_renders_code_block
     output = @renderer.render("```ruby\nputs 'hello'\n```\n")
-    assert_includes output, "puts 'hello'"
+    assert_includes output, "puts"
+    assert_includes output, "'hello'"
     assert_includes output, Marvi::ANSI::GREEN
   end
 
