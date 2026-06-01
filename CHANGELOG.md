@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-02
+
+- Syntax-highlight fenced code blocks via [Rouge](https://github.com/rouge-ruby/rouge). Blocks without a language (or with an unknown one) fall back to the previous single-color rendering.
+- Extend the dark code block background to the longest line so the block reads as a solid pane instead of a ragged shape.
+
 ## [0.4.2] - 2026-05-31
 
 - Add left/right padding in the curses pager so content no longer sits flush against the terminal edges. Padding scales with terminal width.
