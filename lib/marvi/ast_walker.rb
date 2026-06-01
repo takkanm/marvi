@@ -117,9 +117,18 @@ module Marvi
       unless code.empty?
         line_offset = lang ? 1 : 0
         indent = Span.new(text: "  ", bg_color: :dark)
-        Highlighter.lines(code, lang).each_with_index do |spans, i|
+        indent_width = spans_display_width([indent])
+
+        highlighted = Highlighter.lines(code, lang)
+        content_widths = highlighted.map { |spans| spans_display_width(spans) }
+        block_width = [content_widths.max || 0, @max_width - indent_width].min
+
+        highlighted.each_with_index do |spans, i|
           line_src = src ? src + i + line_offset : nil
-          lines << RichLine.new([indent] + spans, source_line: line_src)
+          line_spans = [indent] + spans
+          pad = block_width - content_widths[i]
+          line_spans << Span.new(text: " " * pad, bg_color: :dark) if pad > 0
+          lines << RichLine.new(line_spans, source_line: line_src)
         end
       end
       lines << RichLine.blank
