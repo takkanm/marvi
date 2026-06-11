@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-11
+
+- Render Mermaid fenced code blocks as Unicode box-drawing art. Supports `flowchart`/`graph` (TD/TB/LR/RL), `sequenceDiagram`, `classDiagram`, and `stateDiagram`/`stateDiagram-v2`. Unsupported diagram types, malformed syntax, and over-width output fall back to the highlighted code block.
+
 ## [0.5.0] - 2026-06-02
 
 - Syntax-highlight fenced code blocks via [Rouge](https://github.com/rouge-ruby/rouge). Blocks without a language (or with an unknown one) fall back to the previous single-color rendering.
