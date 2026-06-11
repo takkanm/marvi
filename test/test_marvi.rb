@@ -48,6 +48,54 @@ class TestMarvi < Minitest::Test
     assert_includes output, Marvi::ANSI::GREEN
   end
 
+  def test_renders_mermaid_flowchart_as_boxes
+    md = "```mermaid\ngraph TD\n    A[Start] --> B[End]\n```\n"
+    lines = Marvi::ASTWalker.new.walk(md)
+    text = lines.map(&:plain_text).join("\n")
+
+    assert_includes text, "Start"
+    assert_includes text, "End"
+    assert_includes text, "┌"
+    assert_includes text, "▼"
+    refute_includes text, "graph TD", "diagram source must not leak into the output"
+  end
+
+  def test_renders_mermaid_flowchart_lr
+    md = "```mermaid\ngraph LR\n    Parse --> Walk --> Render\n```\n"
+    lines = Marvi::ASTWalker.new.walk(md)
+    text = lines.map(&:plain_text).join("\n")
+
+    assert_includes text, "Parse"
+    assert_includes text, "Render"
+    assert_includes text, "▶"
+  end
+
+  def test_renders_mermaid_sequence_diagram
+    md = "```mermaid\nsequenceDiagram\n    Client->>Server: Request\n    Server-->>Client: Response\n```\n"
+    lines = Marvi::ASTWalker.new.walk(md)
+    text = lines.map(&:plain_text).join("\n")
+
+    assert_includes text, "Client"
+    assert_includes text, "Server"
+    assert_includes text, "Request"
+    assert_includes text, "▶"
+  end
+
+  def test_unsupported_mermaid_falls_back_to_code_block
+    md = "```mermaid\npie title Pets\n    \"Dogs\" : 386\n```\n"
+    output = @renderer.render(md)
+
+    assert_includes output, "pie title Pets"
+    assert_includes output, "Dogs"
+  end
+
+  def test_malformed_mermaid_falls_back_to_code_block
+    md = "```mermaid\ngraph TD\n    this is not valid mermaid syntax !!!\n```\n"
+    output = @renderer.render(md)
+
+    assert_includes output, "this is not valid mermaid syntax"
+  end
+
   def test_renders_unordered_list
     output = @renderer.render("- foo\n- bar")
     assert_includes output, "foo"

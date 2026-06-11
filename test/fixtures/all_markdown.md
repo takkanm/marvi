@@ -113,6 +113,55 @@ ls -la
 
 ---
 
+## Mermaid Diagrams
+
+### Flowchart (top-down)
+
+```mermaid
+graph TD
+    A[Start] --> B{Is it valid?}
+    B --> C[Process]
+    B --> D[Reject]
+    C --> E[End]
+    D --> E[End]
+```
+
+### Flowchart (left-right)
+
+```mermaid
+graph LR
+    Parse --> Walk
+    Walk --> Render
+    Render --> Output
+```
+
+### Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    Client->>Server: Request
+    Server->>Database: Query
+    Database-->>Server: Result
+    Server-->>Client: Response
+```
+
+### Unsupported Diagram Type (falls back to code block)
+
+```mermaid
+pie title Pets
+    "Dogs" : 386
+    "Cats" : 85
+```
+
+### Malformed Mermaid (falls back to code block)
+
+```mermaid
+graph TD
+    this is not valid mermaid syntax at all !!!
+```
+
+---
+
 ## Blockquotes
 
 > Simple blockquote.

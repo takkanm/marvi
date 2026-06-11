@@ -110,6 +110,17 @@ module Marvi
     def render_codeblock(el)
       src = el.options[:location]
       lang = el.options[:lang]
+
+      if lang == "mermaid"
+        diagram = Diagram.render(el.value.chomp, max_width: @max_width)
+        if diagram
+          lines = diagram.each_with_index.map do |spans, i|
+            RichLine.new(spans, source_line: (i.zero? ? src : nil))
+          end
+          return lines + [RichLine.blank]
+        end
+      end
+
       lines = []
       lines << RichLine.new([Span.new(text: lang, color: :yellow)], source_line: src) if lang
 
