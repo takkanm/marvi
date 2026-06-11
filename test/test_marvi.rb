@@ -81,6 +81,30 @@ class TestMarvi < Minitest::Test
     assert_includes text, "▶"
   end
 
+  def test_renders_mermaid_class_diagram
+    md = "```mermaid\nclassDiagram\n    class Animal {\n        +String name\n        +makeSound()\n    }\n    Animal <|-- Dog\n```\n"
+    lines = Marvi::ASTWalker.new.walk(md)
+    text = lines.map(&:plain_text).join("\n")
+
+    assert_includes text, "Animal"
+    assert_includes text, "+makeSound()"
+    assert_includes text, "├"
+    assert_includes text, "Dog"
+    assert_includes text, "◁"
+  end
+
+  def test_renders_mermaid_state_diagram
+    md = "```mermaid\nstateDiagram-v2\n    [*] --> Idle\n    Idle --> Running : start\n    Running --> Idle : stop\n    Running --> [*]\n```\n"
+    lines = Marvi::ASTWalker.new.walk(md)
+    text = lines.map(&:plain_text).join("\n")
+
+    assert_includes text, "Idle"
+    assert_includes text, "Running"
+    assert_includes text, "●"
+    assert_includes text, "◉"
+    assert_includes text, "start", "transition labels must be preserved"
+  end
+
   def test_unsupported_mermaid_falls_back_to_code_block
     md = "```mermaid\npie title Pets\n    \"Dogs\" : 386\n```\n"
     output = @renderer.render(md)

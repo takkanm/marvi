@@ -145,6 +145,33 @@ sequenceDiagram
     Server-->>Client: Response
 ```
 
+### Class Diagram
+
+```mermaid
+classDiagram
+    class Animal {
+        +String name
+        +int age
+        +makeSound()
+    }
+    class Dog {
+        +String breed
+        +bark()
+    }
+    Animal <|-- Dog
+    Animal --> Habitat
+```
+
+### State Diagram
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Running : start
+    Running --> Idle : stop
+    Running --> [*]
+```
+
 ### Unsupported Diagram Type (falls back to code block)
 
 ```mermaid
