@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-15
+
+- Add incremental search to the curses pager. Press `/` to search as you type, with all matches highlighted (current match in bold) and the view jumping to the nearest match. Navigate matches with `n`/`N` (vi/less style); search is case-insensitive.
+
 ## [0.6.0] - 2026-06-11
 
 - Render Mermaid fenced code blocks as Unicode box-drawing art. Supports `flowchart`/`graph` (TD/TB/LR/RL), `sequenceDiagram`, `classDiagram`, and `stateDiagram`/`stateDiagram-v2`. Unsupported diagram types, malformed syntax, and over-width output fall back to the highlighted code block.
