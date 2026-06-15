@@ -33,6 +33,10 @@ module Marvi
         @file = file
         @markdown = markdown
         @scroll = 0
+        @search_query = nil
+        @search_input = nil
+        @matches = []
+        @current_match = nil
         mark_reloaded
 
         init_curses_state
@@ -123,6 +127,9 @@ module Marvi
                       draw
         when "G" then @scroll = max_scroll
                       draw
+        when "/" then start_search
+        when "n" then jump_match(1)
+        when "N" then jump_match(-1)
         when "e" then launch_editor if @file
         when "r", "R" then reload_from_key if @file
         when ::Curses::Key::RESIZE then handle_resize
@@ -132,6 +139,7 @@ module Marvi
       def handle_resize
         rewalk
         @scroll = [@scroll, max_scroll].min
+        refresh_search_after_rewalk
         draw
       end
 
@@ -197,6 +205,7 @@ module Marvi
         @markdown = File.read(@file)
         rewalk
         @scroll = [@scroll, max_scroll].min
+        refresh_search_after_rewalk
       end
 
       def init_curses_state
@@ -236,7 +245,7 @@ module Marvi
         padding = horizontal_padding
         visible_lines.each_with_index do |line, row|
           ::Curses.setpos(row, padding)
-          render_line(line)
+          render_line(line, highlight_ranges_for(@scroll + row))
         end
         draw_status_bar
         ::Curses.refresh
@@ -247,7 +256,7 @@ module Marvi
         top = @scroll + 1
         bottom = [@scroll + page_size, @lines.size].min
         edit_hint = @file ? "  e edit" : ""
-        status = " #{top}-#{bottom}/#{@lines.size}  j/k scroll  g/G top/bottom#{edit_hint}  q quit"
+        status = " #{top}-#{bottom}/#{@lines.size}  j/k scroll  g/G top/bottom  / search#{search_hint}#{edit_hint}  q quit"
         updated_hint = @file_updated ? "  ● updated (r to reload) " : ""
         available = [::Curses.cols - updated_hint.length, 0].max
 
@@ -261,21 +270,63 @@ module Marvi
         end
       end
 
-      def render_line(line)
+      def render_line(line, highlights = nil)
+        col = 0
         line.spans.each do |span|
-          render_span(span)
+          render_span(span, col, highlights)
+          col += span.text.length
         rescue ::Curses::Error
           # ignore write errors at line edge
         end
       end
 
-      def render_span(span)
+      def render_span(span, col_offset = 0, highlights = nil)
         attr = build_attr(span)
-        if attr != 0
-          ::Curses.attron(attr) { ::Curses.addstr(span.text) }
-        else
-          ::Curses.addstr(span.text)
+        if highlights.nil? || highlights.empty?
+          write_text(span.text, attr)
+          return
         end
+
+        highlight_segments(span.text, col_offset, highlights).each do |text, state|
+          seg_attr = attr
+          seg_attr |= ::Curses::A_REVERSE if state
+          seg_attr |= ::Curses::A_BOLD if state == :current
+          write_text(text, seg_attr)
+        end
+      end
+
+      def write_text(text, attr)
+        if attr != 0
+          ::Curses.attron(attr) { ::Curses.addstr(text) }
+        else
+          ::Curses.addstr(text)
+        end
+      end
+
+      # Split a span's text into runs of identical highlight state so each run can
+      # be drawn with the matching attributes. Highlight ranges are expressed in
+      # whole-line character offsets, hence col_offset locates this span on the line.
+      def highlight_segments(text, col_offset, highlights)
+        chars = text.chars
+        states = Array.new(chars.length)
+        highlights.each do |start, finish, current|
+          start.upto(finish - 1) do |c|
+            idx = c - col_offset
+            next if idx.negative? || idx >= chars.length
+            states[idx] = :current if current
+            states[idx] ||= true
+          end
+        end
+
+        segments = []
+        chars.each_with_index do |ch, i|
+          if segments.empty? || segments.last[1] != states[i]
+            segments << [ch.dup, states[i]]
+          else
+            segments.last[0] << ch
+          end
+        end
+        segments
       end
 
       def build_attr(span)
@@ -308,6 +359,141 @@ module Marvi
       def scroll_by(delta)
         @scroll = (@scroll + delta).clamp(0, max_scroll)
         draw
+      end
+
+      # --- Incremental search ---
+
+      BACKSPACE_KEYS = [127, 8].freeze
+
+      def start_search
+        @search_input = ""
+        update_search(@search_input)
+        draw_search_prompt
+
+        loop do
+          key = ::Curses.getch
+          next if key.nil? || key == -1
+
+          case key
+          when 27 # ESC cancels and clears the search
+            clear_search
+            draw
+            return
+          when "\n", "\r", 10, 13, ::Curses::Key::ENTER
+            commit_search
+            return
+          when *BACKSPACE_KEYS, ::Curses::Key::BACKSPACE
+            @search_input = @search_input[0...-1] || ""
+            update_search(@search_input)
+            draw_search_prompt
+          else
+            next unless key.is_a?(String) && key.match?(/\A[[:print:]]\z/)
+            @search_input += key
+            update_search(@search_input)
+            draw_search_prompt
+          end
+        end
+      end
+
+      def update_search(query)
+        @search_query = query
+        recompute_matches
+        focus_match_from(@scroll) unless @matches.empty?
+        draw
+      end
+
+      def commit_search
+        if @search_query.to_s.empty? || @matches.empty?
+          clear_search
+        end
+        @search_input = nil
+        draw
+      end
+
+      def clear_search
+        @search_query = nil
+        @search_input = nil
+        @matches = []
+        @current_match = nil
+      end
+
+      def recompute_matches
+        @matches = []
+        @current_match = nil
+        needle = @search_query.to_s.downcase
+        return if needle.empty?
+
+        @lines.each_with_index do |line, line_index|
+          haystack = line.plain_text.downcase
+          next if haystack.empty?
+
+          pos = 0
+          while (idx = haystack.index(needle, pos))
+            @matches << [line_index, idx, idx + needle.length]
+            pos = idx + needle.length
+          end
+        end
+      end
+
+      def focus_match_from(from_line)
+        return if @matches.empty?
+        index = @matches.index { |match| match[0] >= from_line } || 0
+        set_current_match(index)
+      end
+
+      def set_current_match(index)
+        return if @matches.empty?
+        @current_match = index % @matches.size
+        ensure_match_visible(@matches[@current_match][0])
+      end
+
+      def ensure_match_visible(line_index)
+        if line_index < @scroll || line_index >= @scroll + page_size
+          @scroll = [line_index, max_scroll].min
+        end
+      end
+
+      def jump_match(direction)
+        return if @matches.empty?
+        if @current_match.nil?
+          focus_match_from(@scroll)
+        else
+          set_current_match(@current_match + direction)
+        end
+        draw
+      end
+
+      def refresh_search_after_rewalk
+        return unless @search_query
+        recompute_matches
+        focus_match_from(@scroll) unless @matches.empty?
+      end
+
+      def highlight_ranges_for(line_index)
+        return nil if @matches.empty?
+        ranges = []
+        @matches.each_with_index do |(li, start, finish), i|
+          ranges << [start, finish, i == @current_match] if li == line_index
+        end
+        ranges.empty? ? nil : ranges
+      end
+
+      def search_hint
+        return "  n/N next/prev" if @search_query.nil? || @search_query.empty?
+        return "  no matches: #{@search_query}" if @matches.empty?
+
+        position = @current_match ? @current_match + 1 : 0
+        "  [#{position}/#{@matches.size}] n/N"
+      end
+
+      def draw_search_prompt
+        prompt = "/#{@search_input}"
+        ::Curses.setpos(::Curses.lines - 1, 0)
+        ::Curses.attron(::Curses.color_pair(COLOR_PAIRS[:cyan])) do
+          ::Curses.addstr(prompt.ljust(::Curses.cols)[0, ::Curses.cols])
+        end
+        ::Curses.setpos(::Curses.lines - 1, [prompt.length, ::Curses.cols - 1].min)
+        ::Curses.refresh
       end
     end
   end
