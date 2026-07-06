@@ -25,29 +25,36 @@ module Marvi
 
       CTRL_D = 4
       CTRL_U = 21
+      TAB_KEY = 9
 
       MIN_HORIZONTAL_PADDING = 2
       HORIZONTAL_PADDING_DIVISOR = 12
 
       def render(markdown, file: nil)
-        @file = file
-        @markdown = markdown
-        @scroll = 0
-        @search_query = nil
+        run([Tab.new(file: file, markdown: markdown)])
+      end
+
+      def render_files(files)
+        run(files.map { |file| Tab.new(file: file) })
+      end
+
+      private
+
+      def run(tabs)
+        @tabs = tabs
+        @current = 0
         @search_input = nil
-        @matches = []
-        @current_match = nil
-        mark_reloaded
+        @status_message = nil
 
         init_curses_state
-        rewalk
+        current_tab.ensure_walked(content_width, page_size)
         draw
 
         catch(:quit) do
           loop do
             key = ::Curses.getch
             if key.nil? || key == -1
-              check_file_updated
+              poll_files
             else
               handle_key(key)
             end
@@ -57,7 +64,9 @@ module Marvi
         ::Curses.close_screen
       end
 
-      private
+      def current_tab
+        @tabs[@current]
+      end
 
       # ncurses uses the terminfo `rep` capability ("ESC[Nb") to compress runs of
       # identical glyphs, but ghostty mishandles it and drops the run from the
@@ -115,6 +124,7 @@ module Marvi
       end
 
       def handle_key(key)
+        @status_message = nil
         case key
         when "q", "Q", 27 then throw :quit
         when "j", ::Curses::Key::DOWN then scroll_by(1)
@@ -123,28 +133,119 @@ module Marvi
         when "u", CTRL_U then scroll_by(-page_size / 2)
         when "f", " ", ::Curses::Key::NPAGE then scroll_by(page_size)
         when "b", ::Curses::Key::PPAGE then scroll_by(-page_size)
-        when "g" then @scroll = 0
+        when "g" then current_tab.scroll = 0
                       draw
-        when "G" then @scroll = max_scroll
+        when "G" then current_tab.scroll = current_tab.max_scroll(page_size)
                       draw
         when "/" then start_search
         when "n" then jump_match(1)
         when "N" then jump_match(-1)
-        when "e" then launch_editor if @file
-        when "r", "R" then reload_from_key if @file
+        when "e" then launch_editor if current_tab.file
+        when "r", "R" then reload_from_key if current_tab.file
+        when "\t", TAB_KEY then cycle_tab(1)
+        when ::Curses::Key::BTAB then cycle_tab(-1)
+        when "1".."9" then switch_to(key.to_i - 1)
+        when "o" then start_open
+        when "x" then close_current_tab
+        when ::Curses::Key::MOUSE then handle_mouse
         when ::Curses::Key::RESIZE then handle_resize
         end
       end
 
-      def handle_resize
-        rewalk
-        @scroll = [@scroll, max_scroll].min
-        refresh_search_after_rewalk
+      # --- tabs ---
+
+      def cycle_tab(delta)
+        return if @tabs.size <= 1
+
+        switch_to((@current + delta) % @tabs.size)
+      end
+
+      def switch_to(index)
+        return if index.negative? || index >= @tabs.size
+
+        @current = index
+        current_tab.ensure_walked(content_width, page_size)
         draw
       end
 
-      def rewalk
-        @lines = ASTWalker.new.walk(@markdown, max_width: content_width)
+      def close_current_tab
+        throw :quit if @tabs.size == 1
+
+        @tabs.delete_at(@current)
+        @current = [@current, @tabs.size - 1].min
+        update_mousemask
+        # The bar may have lost a row (or disappeared), changing the page size.
+        current_tab.ensure_walked(content_width, page_size)
+        draw
+      end
+
+      def open_tab(path)
+        path = File.expand_path(path)
+        existing = @tabs.index { |tab| tab.file == path }
+        return switch_to(existing) if existing
+
+        unless File.file?(path) && File.readable?(path)
+          @status_message = " cannot open: #{path} "
+          draw
+          return
+        end
+
+        @tabs << Tab.new(file: path)
+        update_mousemask
+        switch_to(@tabs.size - 1)
+      end
+
+      def update_mousemask
+        return unless ::Curses.respond_to?(:mousemask)
+
+        # Claim the mouse only when the tab bar is shown, so single-document
+        # sessions keep native terminal text selection.
+        mask = (@tabs.size > 1) ? (::Curses::BUTTON1_CLICKED | ::Curses::BUTTON1_PRESSED) : 0
+        ::Curses.mousemask(mask)
+      end
+
+      def handle_mouse
+        event = ::Curses.getmouse
+        return unless event
+        return if (event.bstate & (::Curses::BUTTON1_CLICKED | ::Curses::BUTTON1_PRESSED)).zero?
+
+        item = TabBar.item_at(tab_layout, event.y, event.x)
+        switch_to(item.index) if item
+      end
+
+      def tab_layout
+        return [] if @tabs.size <= 1
+
+        labels = @tabs.each_with_index.map { |tab, i| tab_label(tab, i) }
+        TabBar.layout(labels, ::Curses.cols)
+      end
+
+      def tab_label(tab, index)
+        updated_mark = tab.file_updated? ? " ●" : ""
+        "#{index + 1}:#{tab.label}#{updated_mark}"
+      end
+
+      def tab_bar_height
+        TabBar.rows(tab_layout)
+      end
+
+      def draw_tab_bar(layout)
+        layout.each do |item|
+          ::Curses.setpos(item.row, item.col)
+          attr = if item.index == @current
+            ::Curses::A_REVERSE | ::Curses::A_BOLD
+          else
+            ::Curses.color_pair(COLOR_PAIRS[:cyan])
+          end
+          ::Curses.attron(attr) { ::Curses.addstr(item.text) }
+        rescue ::Curses::Error
+          # ignore write errors at screen edge
+        end
+      end
+
+      def handle_resize
+        current_tab.rewalk(content_width, page_size)
+        draw
       end
 
       def horizontal_padding
@@ -158,54 +259,26 @@ module Marvi
       end
 
       def reload_from_key
-        reload
-        mark_reloaded
+        current_tab.reload(content_width, page_size)
         draw
       end
 
-      def check_file_updated
-        return unless @file
-        mtime = current_mtime
-        return if mtime.nil? || mtime == @last_mtime
-
-        @last_mtime = mtime
-        return if @file_updated
-
-        @file_updated = true
-        draw_status_bar
-        ::Curses.refresh
-      end
-
-      def mark_reloaded
-        @last_mtime = current_mtime
-        @file_updated = false
-      end
-
-      def current_mtime
-        return nil unless @file
-        File.mtime(@file)
-      rescue SystemCallError
-        nil
+      def poll_files
+        updated = @tabs.select(&:check_file_updated)
+        draw unless updated.empty?
       end
 
       def launch_editor
+        tab = current_tab
         editor = ENV["EDITOR"] || ENV["VISUAL"] || "vi"
-        line = current_source_line
-        cmd = build_editor_command(editor, @file, line)
+        line = tab.current_source_line(page_size)
+        cmd = build_editor_command(editor, tab.file, line)
 
         ::Curses.close_screen
         system(cmd)
         init_curses_state
-        reload
-        mark_reloaded
+        tab.reload(content_width, page_size)
         draw
-      end
-
-      def reload
-        @markdown = File.read(@file)
-        rewalk
-        @scroll = [@scroll, max_scroll].min
-        refresh_search_after_rewalk
       end
 
       def init_curses_state
@@ -217,6 +290,7 @@ module Marvi
         ::Curses.stdscr.keypad(true)
         ::Curses.stdscr.timeout = FILE_POLL_INTERVAL_MS
         setup_colors
+        update_mousemask
       end
 
       def build_editor_command(editor, file, line)
@@ -233,39 +307,39 @@ module Marvi
         end
       end
 
-      def current_source_line
-        visible_lines.each { |line| return line.source_line if line.source_line }
-        # fall back to searching upward from scroll position
-        @scroll.downto(0) { |i| return @lines[i].source_line if @lines[i]&.source_line }
-        1
-      end
-
       def draw
         ::Curses.clear
+        layout = tab_layout
+        draw_tab_bar(layout)
+        offset = TabBar.rows(layout)
+        tab = current_tab
+        tab.clamp_scroll(page_size)
         padding = horizontal_padding
-        visible_lines.each_with_index do |line, row|
-          ::Curses.setpos(row, padding)
-          render_line(line, highlight_ranges_for(@scroll + row))
+        tab.visible_lines(page_size).each_with_index do |line, row|
+          ::Curses.setpos(row + offset, padding)
+          render_line(line, tab.highlight_ranges_for(tab.scroll + row))
         end
         draw_status_bar
         ::Curses.refresh
       end
 
       def draw_status_bar
+        tab = current_tab
         ::Curses.setpos(::Curses.lines - 1, 0)
-        top = @scroll + 1
-        bottom = [@scroll + page_size, @lines.size].min
-        edit_hint = @file ? "  e edit" : ""
-        status = " #{top}-#{bottom}/#{@lines.size}  j/k scroll  g/G top/bottom  / search#{search_hint}#{edit_hint}  q quit"
-        updated_hint = @file_updated ? "  ● updated (r to reload) " : ""
-        available = [::Curses.cols - updated_hint.length, 0].max
+        top = tab.scroll + 1
+        bottom = [tab.scroll + page_size, tab.lines.size].min
+        tab_hint = (@tabs.size > 1) ? " [#{@current + 1}/#{@tabs.size}] Tab next" : ""
+        edit_hint = tab.file ? "  e edit" : ""
+        status = "#{tab_hint} #{top}-#{bottom}/#{tab.lines.size}  j/k scroll  g/G top/bottom  / search#{tab.search_hint}#{edit_hint}  o open  q quit"
+        right_hint = @status_message || (tab.file_updated? ? "  ● updated (r to reload) " : "")
+        available = [::Curses.cols - right_hint.length, 0].max
 
         ::Curses.attron(::Curses.color_pair(COLOR_PAIRS[:cyan])) do
           ::Curses.addstr(status.ljust(available)[0, available])
         end
-        unless updated_hint.empty?
+        unless right_hint.empty?
           ::Curses.attron(::Curses.color_pair(COLOR_PAIRS[:yellow]) | ::Curses::A_BOLD) do
-            ::Curses.addstr(updated_hint)
+            ::Curses.addstr(right_hint)
           end
         end
       end
@@ -344,31 +418,23 @@ module Marvi
         attr
       end
 
-      def visible_lines
-        @lines[@scroll, page_size] || []
-      end
-
       def page_size
-        [::Curses.lines - 1, 1].max
-      end
-
-      def max_scroll
-        [@lines.size - page_size, 0].max
+        [::Curses.lines - 1 - tab_bar_height, 1].max
       end
 
       def scroll_by(delta)
-        @scroll = (@scroll + delta).clamp(0, max_scroll)
+        current_tab.scroll_by(delta, page_size)
         draw
       end
 
-      # --- Incremental search ---
+      # --- line-editing prompts (search and open) ---
 
       BACKSPACE_KEYS = [127, 8].freeze
 
       def start_search
         @search_input = ""
         update_search(@search_input)
-        draw_search_prompt
+        draw_prompt("/#{@search_input}")
 
         loop do
           key = ::Curses.getch
@@ -376,118 +442,66 @@ module Marvi
 
           case key
           when 27 # ESC cancels and clears the search
-            clear_search
+            current_tab.clear_search
+            @search_input = nil
             draw
             return
           when "\n", "\r", 10, 13, ::Curses::Key::ENTER
-            commit_search
+            current_tab.commit_search
+            @search_input = nil
+            draw
             return
           when *BACKSPACE_KEYS, ::Curses::Key::BACKSPACE
             @search_input = @search_input[0...-1] || ""
             update_search(@search_input)
-            draw_search_prompt
+            draw_prompt("/#{@search_input}")
           else
             next unless key.is_a?(String) && key.match?(/\A[[:print:]]\z/)
             @search_input += key
             update_search(@search_input)
-            draw_search_prompt
+            draw_prompt("/#{@search_input}")
           end
         end
       end
 
       def update_search(query)
-        @search_query = query
-        recompute_matches
-        focus_match_from(@scroll) unless @matches.empty?
+        current_tab.update_search(query, page_size)
         draw
       end
 
-      def commit_search
-        if @search_query.to_s.empty? || @matches.empty?
-          clear_search
-        end
-        @search_input = nil
+      def jump_match(direction)
+        current_tab.jump_match(direction, page_size)
         draw
       end
 
-      def clear_search
-        @search_query = nil
-        @search_input = nil
-        @matches = []
-        @current_match = nil
-      end
+      def start_open
+        input = ""
+        draw_prompt("open: #{input}")
 
-      def recompute_matches
-        @matches = []
-        @current_match = nil
-        needle = @search_query.to_s.downcase
-        return if needle.empty?
+        loop do
+          key = ::Curses.getch
+          next if key.nil? || key == -1
 
-        @lines.each_with_index do |line, line_index|
-          haystack = line.plain_text.downcase
-          next if haystack.empty?
-
-          pos = 0
-          while (idx = haystack.index(needle, pos))
-            @matches << [line_index, idx, idx + needle.length]
-            pos = idx + needle.length
+          case key
+          when 27 # ESC cancels
+            draw
+            return
+          when "\n", "\r", 10, 13, ::Curses::Key::ENTER
+            input = input.strip
+            input.empty? ? draw : open_tab(input)
+            return
+          when *BACKSPACE_KEYS, ::Curses::Key::BACKSPACE
+            input = input[0...-1] || ""
+            draw_prompt("open: #{input}")
+          else
+            next unless key.is_a?(String) && key.match?(/\A[[:print:]]\z/)
+            input += key
+            draw_prompt("open: #{input}")
           end
         end
       end
 
-      def focus_match_from(from_line)
-        return if @matches.empty?
-        index = @matches.index { |match| match[0] >= from_line } || 0
-        set_current_match(index)
-      end
-
-      def set_current_match(index)
-        return if @matches.empty?
-        @current_match = index % @matches.size
-        ensure_match_visible(@matches[@current_match][0])
-      end
-
-      def ensure_match_visible(line_index)
-        if line_index < @scroll || line_index >= @scroll + page_size
-          @scroll = [line_index, max_scroll].min
-        end
-      end
-
-      def jump_match(direction)
-        return if @matches.empty?
-        if @current_match.nil?
-          focus_match_from(@scroll)
-        else
-          set_current_match(@current_match + direction)
-        end
-        draw
-      end
-
-      def refresh_search_after_rewalk
-        return unless @search_query
-        recompute_matches
-        focus_match_from(@scroll) unless @matches.empty?
-      end
-
-      def highlight_ranges_for(line_index)
-        return nil if @matches.empty?
-        ranges = []
-        @matches.each_with_index do |(li, start, finish), i|
-          ranges << [start, finish, i == @current_match] if li == line_index
-        end
-        ranges.empty? ? nil : ranges
-      end
-
-      def search_hint
-        return "  n/N next/prev" if @search_query.nil? || @search_query.empty?
-        return "  no matches: #{@search_query}" if @matches.empty?
-
-        position = @current_match ? @current_match + 1 : 0
-        "  [#{position}/#{@matches.size}] n/N"
-      end
-
-      def draw_search_prompt
-        prompt = "/#{@search_input}"
+      def draw_prompt(prompt)
         ::Curses.setpos(::Curses.lines - 1, 0)
         ::Curses.attron(::Curses.color_pair(COLOR_PAIRS[:cyan])) do
           ::Curses.addstr(prompt.ljust(::Curses.cols)[0, ::Curses.cols])
@@ -498,3 +512,6 @@ module Marvi
     end
   end
 end
+
+require_relative "curses/tab"
+require_relative "curses/tab_bar"

@@ -5,7 +5,7 @@ require "optparse"
 require_relative "../lib/marvi"
 
 OptionParser.new do |opts|
-  opts.banner = "Usage: marvi [FILE]\n       cat FILE | marvi"
+  opts.banner = "Usage: marvi [FILE...]\n       cat FILE | marvi"
   opts.on("-h", "--help", "Show help") do
     puts opts
     exit
@@ -16,14 +16,27 @@ OptionParser.new do |opts|
   end
 end.parse!
 
-markdown = if ARGV.empty?
-  $stdin.read
-else
-  File.read(ARGV[0])
+ARGV.each do |file|
+  abort "marvi: cannot open #{file}" unless File.file?(file) && File.readable?(file)
 end
 
 if $stdout.tty?
-  Marvi::Renderer::Curses.new.render(markdown, file: ARGV[0])
+  if ARGV.empty?
+    Marvi::Renderer::Curses.new.render($stdin.read)
+  else
+    Marvi::Renderer::Curses.new.render_files(ARGV)
+  end
 else
-  print Marvi::Renderer::ANSI.new.render(markdown)
+  renderer = Marvi::Renderer::ANSI.new
+  if ARGV.empty?
+    print renderer.render($stdin.read)
+  else
+    ARGV.each_with_index do |file, i|
+      if ARGV.size > 1
+        puts if i.positive?
+        puts "==> #{file} <=="
+      end
+      print renderer.render(File.read(file, encoding: Encoding::UTF_8))
+    end
+  end
 end

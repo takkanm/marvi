@@ -24,6 +24,22 @@ Render a Markdown file:
 marvi README.md
 ```
 
+Open multiple files at once — each file gets its own tab in a bar at the top of the screen (the bar wraps to multiple rows when tabs don't fit the terminal width):
+
+```bash
+marvi README.md CHANGELOG.md docs/guide.md
+```
+
+Tab keys inside the pager:
+
+| Key | Action |
+| --- | --- |
+| `Tab` / `Shift-Tab` | next / previous tab |
+| `1`–`9` | jump to tab by number |
+| mouse click on a tab | switch to that tab |
+| `o` | open a file in a new tab |
+| `x` | close the current tab (closing the last one quits) |
+
 Read from stdin:
 
 ```bash

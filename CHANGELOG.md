@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- Open multiple files in tabs. Pass several files on the command line (`marvi a.md b.md`), and a tab bar with the file names appears at the top of the screen, wrapping to multiple rows when the terminal is narrow. Switch tabs with `Tab`/`Shift-Tab`, jump directly with `1`–`9`, or click a tab with the mouse. Press `o` to open another file in a new tab and `x` to close the current one. File-change polling covers every tab and marks updated ones with `●` in the bar.
+
 ## [0.7.0] - 2026-06-15
 
 - Add incremental search to the curses pager. Press `/` to search as you type, with all matches highlighted (current match in bold) and the view jumping to the nearest match. Navigate matches with `n`/`N` (vi/less style); search is case-insensitive.
