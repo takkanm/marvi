@@ -1,5 +1,6 @@
 ## [Unreleased]
 
+- Turn the `o` prompt into a file picker. It lists Markdown/text documents under the current directory and narrows the list as you type (all space-separated terms must match, case-insensitive); select with `C-n`/`C-p` or the arrow keys and open with `Enter`. Input starting with `/`, `~`, `./`, or `../` switches to explicit path entry with shell-style `Tab` completion, and selecting a directory descends into it.
 - Open multiple files in tabs. Pass several files on the command line (`marvi a.md b.md`), and a tab bar with the file names appears at the top of the screen, wrapping to multiple rows when the terminal is narrow. Switch tabs with `Tab`/`Shift-Tab`, jump directly with `1`–`9`, or click a tab with the mouse. Press `o` to open another file in a new tab and `x` to close the current one. File-change polling covers every tab and marks updated ones with `●` in the bar.
 
 ## [0.7.0] - 2026-06-15

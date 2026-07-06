@@ -37,8 +37,10 @@ Tab keys inside the pager:
 | `Tab` / `Shift-Tab` | next / previous tab |
 | `1`–`9` | jump to tab by number |
 | mouse click on a tab | switch to that tab |
-| `o` | open a file in a new tab |
+| `o` | open a file in a new tab via the file picker |
 | `x` | close the current tab (closing the last one quits) |
+
+The `o` picker lists Markdown/text documents under the current directory and narrows the list as you type (every space-separated term must match, case-insensitive). Move the selection with `C-n`/`C-p` (or the arrow keys) and press `Enter` to open. Start the input with `/`, `~`, `./`, or `../` to enter an explicit path instead — `Tab` then completes it shell-style, and selecting a directory descends into it.
 
 Read from stdin:
 

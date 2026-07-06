@@ -24,6 +24,8 @@ module Marvi
       FILE_POLL_INTERVAL_MS = 500
 
       CTRL_D = 4
+      CTRL_N = 14
+      CTRL_P = 16
       CTRL_U = 21
       TAB_KEY = 9
 
@@ -475,10 +477,15 @@ module Marvi
       end
 
       def start_open
+        picker = FilePicker.new
         input = ""
-        draw_prompt("open: #{input}")
+        selected = 0
 
         loop do
+          candidates = picker.candidates(input)
+          selected = candidates.empty? ? 0 : selected % candidates.size
+          draw_picker(input, candidates, selected)
+
           key = ::Curses.getch
           next if key.nil? || key == -1
 
@@ -487,18 +494,73 @@ module Marvi
             draw
             return
           when "\n", "\r", 10, 13, ::Curses::Key::ENTER
-            input = input.strip
-            input.empty? ? draw : open_tab(input)
-            return
+            choice = candidates[selected] || input.strip
+            if choice.empty?
+              draw
+              return
+            elsif choice.end_with?("/")
+              # descend into the selected directory and keep picking
+              input = choice
+              selected = 0
+            else
+              open_tab(choice)
+              return
+            end
+          when "\t", TAB_KEY
+            if picker.path_mode?(input)
+              input = picker.complete(input)
+            else
+              selected += 1
+            end
+          when ::Curses::Key::BTAB
+            selected -= 1
+          when CTRL_N, ::Curses::Key::DOWN
+            selected += 1
+          when CTRL_P, ::Curses::Key::UP
+            selected -= 1
           when *BACKSPACE_KEYS, ::Curses::Key::BACKSPACE
             input = input[0...-1] || ""
-            draw_prompt("open: #{input}")
+            selected = 0
           else
-            next unless key.is_a?(String) && key.match?(/\A[[:print:]]\z/)
-            input += key
-            draw_prompt("open: #{input}")
+            if key.is_a?(String) && key.match?(/\A[[:print:]]\z/)
+              input += key
+              selected = 0
+            end
           end
         end
+      end
+
+      def draw_picker(input, candidates, selected)
+        ::Curses.clear
+        width = ::Curses.cols
+        position = candidates.empty? ? 0 : selected + 1
+        header = " open file  (#{position}/#{candidates.size})  C-n/C-p select  Enter open  ESC cancel"
+        ::Curses.setpos(0, 0)
+        ::Curses.attron(::Curses.color_pair(COLOR_PAIRS[:cyan]) | ::Curses::A_BOLD) do
+          ::Curses.addstr(header.ljust(width)[0, width])
+        end
+
+        list_rows = [::Curses.lines - 2, 1].max
+        offset = (selected < list_rows) ? 0 : selected - list_rows + 1
+        (candidates[offset, list_rows] || []).each_with_index do |candidate, i|
+          ::Curses.setpos(1 + i, 0)
+          text = " #{candidate} ".ljust(width)[0, width]
+          if offset + i == selected
+            ::Curses.attron(::Curses::A_REVERSE) { ::Curses.addstr(text) }
+          else
+            ::Curses.addstr(text)
+          end
+        rescue ::Curses::Error
+          # ignore write errors at screen edge
+        end
+
+        prompt = "open: #{input}"
+        ::Curses.setpos(::Curses.lines - 1, 0)
+        ::Curses.attron(::Curses.color_pair(COLOR_PAIRS[:cyan])) do
+          ::Curses.addstr(prompt.ljust(width)[0, width])
+        end
+        ::Curses.setpos(::Curses.lines - 1, [prompt.length, width - 1].min)
+        ::Curses.refresh
       end
 
       def draw_prompt(prompt)
@@ -515,3 +577,4 @@ end
 
 require_relative "curses/tab"
 require_relative "curses/tab_bar"
+require_relative "curses/file_picker"
