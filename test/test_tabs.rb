@@ -50,6 +50,19 @@ class TestTabBar < Minitest::Test
   def test_rows_of_empty_layout
     assert_equal 0, TabBar.rows([])
   end
+
+  def test_item_for_click_includes_margin_row_below_bar
+    items = TabBar.layout(%w[aaaa.md bbbb.md cccc.md], 20)
+
+    # rows 0-1 are the bar; row 2 is the margin row under the last bar row
+    assert_equal 2, TabBar.item_for_click(items, 2, 3).index
+    # margin clicks outside any tab's columns hit nothing
+    assert_nil TabBar.item_for_click(items, 2, 15)
+    # rows past the margin are the document, never a tab
+    assert_nil TabBar.item_for_click(items, 3, 3)
+    # direct hits still resolve
+    assert_equal 0, TabBar.item_for_click(items, 0, 0).index
+  end
 end
 
 class TestTab < Minitest::Test

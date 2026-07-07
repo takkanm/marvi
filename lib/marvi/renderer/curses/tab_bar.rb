@@ -42,6 +42,12 @@ module Marvi
           items.find { |item| item.contains?(y, x) }
         end
 
+        # Resolve a click including the margin row directly below the bar,
+        # which is attributed to the tab above it — a taller click target.
+        def item_for_click(items, y, x)
+          item_at(items, y, x) || ((y == rows(items)) ? item_at(items, y - 1, x) : nil)
+        end
+
         def truncate_to_width(text, max_width)
           return text if Unicode::DisplayWidth.of(text) <= max_width
 

@@ -32,6 +32,11 @@ module Marvi
       MIN_HORIZONTAL_PADDING = 2
       HORIZONTAL_PADDING_DIVISOR = 12
 
+      # Blank row between the tab bar and the document. Clicks landing on it
+      # are attributed to the tab directly above, giving each tab a taller
+      # effective click target than the single character cell.
+      TAB_BAR_MARGIN_ROWS = 1
+
       def render(markdown, file: nil)
         run([Tab.new(file: file, markdown: markdown)])
       end
@@ -211,7 +216,7 @@ module Marvi
         return unless event
         return if (event.bstate & (::Curses::BUTTON1_CLICKED | ::Curses::BUTTON1_PRESSED)).zero?
 
-        item = TabBar.item_at(tab_layout, event.y, event.x)
+        item = TabBar.item_for_click(tab_layout, event.y, event.x)
         switch_to(item.index) if item
       end
 
@@ -228,7 +233,8 @@ module Marvi
       end
 
       def tab_bar_height
-        TabBar.rows(tab_layout)
+        rows = TabBar.rows(tab_layout)
+        rows.zero? ? 0 : rows + TAB_BAR_MARGIN_ROWS
       end
 
       def draw_tab_bar(layout)
@@ -313,7 +319,8 @@ module Marvi
         ::Curses.clear
         layout = tab_layout
         draw_tab_bar(layout)
-        offset = TabBar.rows(layout)
+        bar_rows = TabBar.rows(layout)
+        offset = bar_rows.zero? ? 0 : bar_rows + TAB_BAR_MARGIN_ROWS
         tab = current_tab
         tab.clamp_scroll(page_size)
         padding = horizontal_padding

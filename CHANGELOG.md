@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- Add a blank margin row between the tab bar and the document. Clicks on the margin row select the tab directly above it, giving each tab a taller effective click target.
+
 ## [0.8.0] - 2026-07-06
 
 - Turn the `o` prompt into a file picker. It lists Markdown/text documents under the current directory and narrows the list as you type (all space-separated terms must match, case-insensitive); select with `C-n`/`C-p` or the arrow keys and open with `Enter`. Input starting with `/`, `~`, `./`, or `../` switches to explicit path entry with shell-style `Tab` completion, and selecting a directory descends into it.
