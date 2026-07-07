@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.8.1] - 2026-07-07
+
 - Add a blank margin row between the tab bar and the document. Clicks on the margin row select the tab directly above it, giving each tab a taller effective click target.
 
 ## [0.8.0] - 2026-07-06
